@@ -24,10 +24,6 @@ func SetupRouter(r *gin.Engine, db *gorm.DB) {
 		handlers.GetAllLotto(c, db)
 	})
 
-	r.GET("/lotto/sell", func(c *gin.Context) {
-		handlers.GetLottoSell(c, db)
-	})
-
 	r.GET("/lotto/lucky", func(c *gin.Context) {
 		handlers.LottoLucky(c, db)
 	})
