@@ -72,4 +72,38 @@ func SetupRouter(r *gin.Engine, db *gorm.DB) {
 		handlers.CheckUserLotto(c, db)
 	})
 
+	//ของกุที่เพิ่มาใหม่
+	r.POST("/lotto/generate", func(c *gin.Context) {
+		handlers.InsertLotto(c, db)
+	})
+
+	r.GET("/lottos/count", func(c *gin.Context) {
+		 handlers.LottoCount(c, db) })
+
+
+
+	r.GET("/lotto/search", func(c *gin.Context) { 
+		handlers.SearchLotto(c, db) })
+		
+	r.GET("/lotto/random", func(c *gin.Context) {
+		 handlers.RandomLotto(c, db) })
+
+	r.POST("/lotto/preview-update", func(c *gin.Context) { 
+		handlers.PreviewUpdateLotto(c, db) })
+
+	r.POST("/lotto/bulk-update",  func(c *gin.Context) { 
+		handlers.BulkUpdateLottoNumbers(c, db) })
+
+
+r.GET("/rewards/generate-preview", func(c *gin.Context) { handlers.GenerateRewardsPreview(c, db) })
+r.POST("/rewards/release", func(c *gin.Context) { handlers.ReleaseRewards(c, db) })
+
+r.GET("/rewards/currsent", func(c *gin.Context) {
+    handlers.GetCurrentRewards(c, db)
+
+})
+
+
+	
+
 }
