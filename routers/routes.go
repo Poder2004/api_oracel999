@@ -40,8 +40,6 @@ func SetupRouter(r *gin.Engine, db *gorm.DB) {
 		handlers.InsertLotto(c, db)
 	})
 
-	r.POST("/purchases/quote", func(c *gin.Context) { handlers.QuotePurchase(c, db) }) // คำนวณยอดในตะกร้า
-
 	r.POST("/purchases", func(c *gin.Context) { handlers.CreatePurchase(c, db) }) // ซื้อจริง
 
 	r.GET("/users/purchases", func(c *gin.Context) {
@@ -77,33 +75,32 @@ func SetupRouter(r *gin.Engine, db *gorm.DB) {
 		handlers.InsertLotto(c, db)
 	})
 
-	r.GET("/lottos/count", func(c *gin.Context) {
-		 handlers.LottoCount(c, db) })
+	// r.GET("/lottos/count", func(c *gin.Context) {
+	// 	handlers.LottoCount(c, db)
+	// })
 
+	// r.GET("/lotto/search", func(c *gin.Context) {
+	// 	handlers.SearchLotto(c, db)
+	// })
 
+	// r.GET("/lotto/random", func(c *gin.Context) {
+	// 	handlers.RandomLotto(c, db)
+	// })
 
-	r.GET("/lotto/search", func(c *gin.Context) { 
-		handlers.SearchLotto(c, db) })
-		
-	r.GET("/lotto/random", func(c *gin.Context) {
-		 handlers.RandomLotto(c, db) })
+	// r.POST("/lotto/preview-update", func(c *gin.Context) {
+	// 	handlers.PreviewUpdateLotto(c, db)
+	// })
 
-	r.POST("/lotto/preview-update", func(c *gin.Context) { 
-		handlers.PreviewUpdateLotto(c, db) })
+	// r.POST("/lotto/bulk-update", func(c *gin.Context) {
+	// 	handlers.BulkUpdateLottoNumbers(c, db)
+	// })
 
-	r.POST("/lotto/bulk-update",  func(c *gin.Context) { 
-		handlers.BulkUpdateLottoNumbers(c, db) })
+	// r.GET("/rewards/generate-preview", func(c *gin.Context) { handlers.GenerateRewardsPreview(c, db) })
+	// r.POST("/rewards/release", func(c *gin.Context) { handlers.ReleaseRewards(c, db) })
 
+	// r.GET("/rewards/currsent", func(c *gin.Context) {
+	// 	handlers.GetCurrentRewards(c, db)
 
-r.GET("/rewards/generate-preview", func(c *gin.Context) { handlers.GenerateRewardsPreview(c, db) })
-r.POST("/rewards/release", func(c *gin.Context) { handlers.ReleaseRewards(c, db) })
-
-r.GET("/rewards/currsent", func(c *gin.Context) {
-    handlers.GetCurrentRewards(c, db)
-
-})
-
-
-	
+	// })
 
 }
