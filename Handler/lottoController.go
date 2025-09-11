@@ -5,25 +5,27 @@ import (
 	"math/rand"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 
 	"my-go-project/models"
 )
 
+func GetAllLotto(c *gin.Context, db *gorm.DB) {
 
-func GetAllLottoASC(c *gin.Context, db *gorm.DB) {
-	fmt.Println(">>> HIT GetAllLottoASC") // debug log
+	const sql = "SELECT * FROM lottos ORDER BY lotto_id ASC"
+
+	// 2. Execute คำสั่ง SQL และ Scan ผลลัพธ์ลงใน slice `items`
 	var items []models.Lotto
-	if err := db.Model(&models.Lotto{}).
-		Order("lotto_id ASC").
-		Find(&items).Error; err != nil {
+	if err := db.Raw(sql).Scan(&items).Error; err != nil {
 		c.JSON(500, gin.H{"status": "error", "message": err.Error()})
 		return
 	}
+
+	// --- ส่วนของการตอบกลับ ---
 	c.JSON(200, gin.H{
 		"status": "success",
 		"count":  len(items), // ใช้ count แทน page/limit เพื่อแยกให้ออกว่าเป็นตัวใหม่
@@ -31,16 +33,17 @@ func GetAllLottoASC(c *gin.Context, db *gorm.DB) {
 	})
 }
 
-// GET /lotto/sell  -> ดึงเฉพาะที่ยังขายอยู่ (status='sell')
+// ดึงเฉพาะที่ยังขายอยู่
 func GetLottoSell(c *gin.Context, db *gorm.DB) {
+	const sql = "SELECT * FROM lottos WHERE status = ? ORDER BY lotto_id ASC"
+
 	var items []models.Lotto
-	if err := db.Model(&models.Lotto{}).
-		Where("status = ?", "sell").
-		Order("lotto_id ASC").
-		Find(&items).Error; err != nil {
+	if err := db.Raw(sql, "sell").Scan(&items).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": err.Error()})
 		return
 	}
+
+	// --- ส่วนของการตอบกลับ  ---
 	c.JSON(http.StatusOK, gin.H{
 		"status": "success",
 		"total":  len(items),
@@ -53,44 +56,32 @@ func random6() string {
 	return fmt.Sprintf("%06d", rand.Intn(1_000_000))
 }
 
-// POST /lotto/seed?count=100
-// สุ่มเลข 6 หลัก "ไม่ซ้ำ" ใส่ตาราง lotto ให้ครบ count (ดีฟอลต์ 100)
-// ใช้ UNIQUE(lotto_number) กันซ้ำระดับ DB + DoNothing เพื่อข้ามเลขที่ชน
 func InsertLotto(c *gin.Context, db *gorm.DB) {
-	// seed rand (ครั้งแรกของโปรเซสพอ แต่อยู่ตรงนี้ก็ใช้ได้)
+	//ส่วนของการ Seed, อ่านค่า count, และกำหนด createdBy
 	rand.Seed(time.Now().UnixNano())
-
-	// อ่านจำนวนที่ต้องการ
 	want := 100
 	if v := c.Query("count"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			want = n
 		}
 	}
-	if want > 10000 { // กันยิงหนักเกินไป
+	if want > 10000 {
 		want = 10000
 	}
-
-	// ถ้ามี auth แล้วอยากบันทึกผู้สร้าง:
 	var createdBy *uint = nil
-	// ex:
-	// if uid, ok := c.Get("user_id"); ok {
-	//     if id, ok2 := uid.(uint); ok2 { createdBy = &id }
-	// }
 
+	// --- ส่วนของ Loop และการสร้าง Batch  ---
 	inserted, attempts := 0, 0
 	const maxAttempts = 200
 
 	for inserted < want && attempts < maxAttempts {
 		attempts++
 
-		// ขนาด batch
 		batchSize := want - inserted
 		if batchSize > 200 {
 			batchSize = 200
 		}
 
-		// กันซ้ำใน batch ก่อน
 		seen := make(map[string]struct{}, batchSize)
 		batch := make([]models.Lotto, 0, batchSize)
 
@@ -108,13 +99,24 @@ func InsertLotto(c *gin.Context, db *gorm.DB) {
 			})
 		}
 
-		// Insert โดยข้ามเลขที่ชน (ต้องมี UNIQUE(lotto_number) ใน DB)
-		res := db.
-			Clauses(clause.OnConflict{
-				Columns:   []clause.Column{{Name: "lotto_number"}},
-				DoNothing: true,
-			}).
-			Create(&batch)
+		var args []interface{}
+		var sqlBuilder strings.Builder
+
+		// สำหรับ MySQL, "INSERT IGNORE" คือวิธีที่ง่ายที่สุดในการทำ "Do Nothing" on conflict
+		sqlBuilder.WriteString("INSERT IGNORE INTO lottos (lotto_number, status, price, created_by) VALUES ")
+
+		// 2. สร้าง placeholders '(?,?,?,?)' และ arguments สำหรับแต่ละรายการใน batch
+		for i, item := range batch {
+			if i > 0 {
+				sqlBuilder.WriteString(", ") // เติมจุลภาคคั่นระหว่าง VALUES
+			}
+			sqlBuilder.WriteString("(?, ?, ?, ?)")
+			args = append(args, item.LottoNumber, item.Status, item.Price, item.CreatedBy)
+		}
+
+		// 3. Execute คำสั่ง SQL ที่สร้างขึ้นมา
+		res := db.Exec(sqlBuilder.String(), args...)
+		// ----------------------------------------------------
 
 		if res.Error != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
@@ -127,14 +129,6 @@ func InsertLotto(c *gin.Context, db *gorm.DB) {
 		inserted += int(res.RowsAffected)
 	}
 
-	if inserted < want {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"status":  "error",
-			"message": fmt.Sprintf("สุ่มและเพิ่มได้ %d จาก %d (เลขชนกับของเก่ามากเกินไป)", inserted, want),
-		})
-		return
-	}
-
 	c.JSON(http.StatusOK, gin.H{
 		"status":   "success",
 		"inserted": inserted,
@@ -142,57 +136,40 @@ func InsertLotto(c *gin.Context, db *gorm.DB) {
 }
 
 func LottoLucky(c *gin.Context, db *gorm.DB) {
-	// 1. กำหนดจำนวนที่ต้องการสุ่ม
-	// การใช้ค่าคงที่ช่วยให้จัดการโค้ดได้ง่ายขึ้น
+
 	const luckyLottoCount = 3
 
+	const sql = "SELECT * FROM lottos WHERE status = ? ORDER BY RAND() LIMIT ?"
+
 	var items []models.Lotto
-
-	// 2. สร้าง Query ที่มีประสิทธิภาพ
-	// เราจะให้ Database ทำงานหนักแทนเรา
-	if err := db.Model(&models.Lotto{}).
-		Where("status = ?", "sell").     // 2.1 กรองเอาเฉพาะสลากที่ยัง "ขาย" อยู่
-		Order("RAND()").                 // 2.2 สั่งให้เรียงลำดับแบบสุ่ม (สำคัญมาก!)
-		Limit(luckyLottoCount).          // 2.3 จำกัดจำนวนผลลัพธ์แค่ 5 รายการ
-		Find(&items).Error; err != nil { // 2.4 ดึงข้อมูลที่ผ่านเงื่อนไขทั้งหมด
-
-		// จัดการ Error กรณีที่การ query ล้มเหลว
+	if err := db.Raw(sql, "sell", luckyLottoCount).Scan(&items).Error; err != nil {
+		// จัดการ Error กรณีที่การ query ล้มเหลว (เหมือนเดิม)
 		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": err.Error()})
 		return
 	}
 
-	// 3. ส่งข้อมูลที่สุ่มและกรองแล้วกลับไป
 	c.JSON(http.StatusOK, gin.H{
 		"status": "success",
-		"total":  len(items), // จำนวนที่ได้มาจริง (อาจน้อยกว่า 5 ถ้ามีไม่ถึง)
+		"total":  len(items),
 		"data":   items,
 	})
 }
 
 func LottoAuspicious(c *gin.Context, db *gorm.DB) {
-	// 1. กำหนดจำนวนที่ต้องการสุ่ม
-	// การใช้ค่าคงที่ช่วยให้จัดการโค้ดได้ง่ายขึ้น
+
 	const luckyLottoCount = 3
 
+	const sql = "SELECT * FROM lottos WHERE status = ? ORDER BY RAND() LIMIT ?"
+
 	var items []models.Lotto
-
-	// 2. สร้าง Query ที่มีประสิทธิภาพ
-	// เราจะให้ Database ทำงานหนักแทนเรา
-	if err := db.Model(&models.Lotto{}).
-		Where("status = ?", "sell").     // 2.1 กรองเอาเฉพาะสลากที่ยัง "ขาย" อยู่
-		Order("RAND()").                 // 2.2 สั่งให้เรียงลำดับแบบสุ่ม (สำคัญมาก!)
-		Limit(luckyLottoCount).          // 2.3 จำกัดจำนวนผลลัพธ์แค่ 5 รายการ
-		Find(&items).Error; err != nil { // 2.4 ดึงข้อมูลที่ผ่านเงื่อนไขทั้งหมด
-
-		// จัดการ Error กรณีที่การ query ล้มเหลว
+	if err := db.Raw(sql, "sell", luckyLottoCount).Scan(&items).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": err.Error()})
 		return
 	}
 
-	// 3. ส่งข้อมูลที่สุ่มและกรองแล้วกลับไป
 	c.JSON(http.StatusOK, gin.H{
 		"status": "success",
-		"total":  len(items), // จำนวนที่ได้มาจริง (อาจน้อยกว่า 5 ถ้ามีไม่ถึง)
+		"total":  len(items),
 		"data":   items,
 	})
 }

@@ -21,7 +21,7 @@ func SetupRouter(r *gin.Engine, db *gorm.DB) {
 
 	// routers.go
 	r.GET("/lotto", func(c *gin.Context) {
-		handlers.GetAllLottoASC(c, db)
+		handlers.GetAllLotto(c, db)
 	})
 
 	r.GET("/lotto/sell", func(c *gin.Context) {
@@ -70,10 +70,10 @@ func SetupRouter(r *gin.Engine, db *gorm.DB) {
 		handlers.CheckUserLotto(c, db)
 	})
 
-	//ของกุที่เพิ่มาใหม่
-	r.POST("/lotto/generate", func(c *gin.Context) {
-		handlers.InsertLotto(c, db)
-	})
+	// //ของกุที่เพิ่มาใหม่
+	// r.POST("/lotto/generate", func(c *gin.Context) {
+	// 	handlers.InsertLotto(c, db)
+	// })
 
 	// r.GET("/lottos/count", func(c *gin.Context) {
 	// 	handlers.LottoCount(c, db)
