@@ -1,7 +1,8 @@
 package routers
 
 import (
-	handlers "my-go-project/Handler"
+	handlersadmin "my-go-project/Handler/admin"
+	handlers "my-go-project/Handler/member"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -18,20 +19,12 @@ func SetupRouter(r *gin.Engine, db *gorm.DB) {
 		handlers.LoginHandler(c, db)
 	})
 
-	r.GET("/lotto", func(c *gin.Context) {
-		handlers.GetAllLotto(c, db)
-	})
-
 	r.GET("/lotto/lucky", func(c *gin.Context) {
 		handlers.LottoLucky(c, db)
 	})
 
 	r.GET("/lotto/Auspicious", func(c *gin.Context) {
 		handlers.LottoAuspicious(c, db)
-	})
-
-	r.POST("/lotto/generate", func(c *gin.Context) {
-		handlers.InsertLotto(c, db)
 	})
 
 	r.POST("/purchases", func(c *gin.Context) { handlers.CreatePurchase(c, db) }) // ซื้อจริง
@@ -65,26 +58,34 @@ func SetupRouter(r *gin.Engine, db *gorm.DB) {
 	})
 
 	//ของกุที่เพิ่มาใหม่
+	r.POST("/lotto/generate", func(c *gin.Context) {
+		handlersadmin.InsertLotto(c, db)
+	})
+	r.GET("/lotto", func(c *gin.Context) {
+		handlersadmin.GetAllLotto(c, db)
+	})
 
-	// r.GET("/lottos/count", func(c *gin.Context) {
-	// 	handlers.LottoCount(c, db)
-	// })
+	r.GET("/lottos/count", func(c *gin.Context) {
+		handlersadmin.LottoCount(c, db)
+	})
 
-	// r.POST("/lotto/preview-update", func(c *gin.Context) {
-	// 	handlers.PreviewUpdateLotto(c, db)
-	// })
+	r.POST("/lotto/preview-update", func(c *gin.Context) {
+		handlersadmin.PreviewUpdateLotto(c, db)
+	})
 
-	// r.POST("/lotto/bulk-update", func(c *gin.Context) {
-	// 	handlers.BulkUpdateLottoNumbers(c, db)
-	// })
+	r.POST("/lotto/bulk-update", func(c *gin.Context) {
+		handlersadmin.BulkUpdateLottoNumbers(c, db)
+	})
 
-	// r.GET("/rewards/generate-preview", func(c *gin.Context) { handlers.GenerateRewardsPreview(c, db) })
+	r.GET("/rewards/generate-preview", func(c *gin.Context) {
+		 handlersadmin.GenerateRewardsPreview(c, db) })
 
-	// r.POST("/rewards/release", func(c *gin.Context) { handlers.ReleaseRewards(c, db) })
+	r.POST("/rewards/release", func(c *gin.Context) { 
+		handlersadmin.ReleaseRewards(c, db) })
 
-	// r.GET("/rewards/currsent", func(c *gin.Context) {
-	// 	handlers.GetCurrentRewards(c, db)
+	r.GET("/rewards/currsent", func(c *gin.Context) {
+		handlersadmin.GetCurrentRewards(c, db)
 
-	// })
+	})
 
 }
