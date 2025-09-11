@@ -14,7 +14,7 @@ import (
 	"my-go-project/models"
 )
 
-// handlers/lotto_simple.go
+
 func GetAllLottoASC(c *gin.Context, db *gorm.DB) {
 	fmt.Println(">>> HIT GetAllLottoASC") // debug log
 	var items []models.Lotto

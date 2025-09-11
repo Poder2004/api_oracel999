@@ -21,7 +21,7 @@ func SetupRouter(r *gin.Engine, db *gorm.DB) {
 
 	// routers.go
 	r.GET("/lotto", func(c *gin.Context) {
-		handlers.GetAllLottoASC(c, db) // ← ใช้ตัวนี้แทน
+		handlers.GetAllLottoASC(c, db)
 	})
 
 	r.GET("/lotto/sell", func(c *gin.Context) {
