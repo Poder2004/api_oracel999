@@ -102,6 +102,7 @@ func ReleaseRewards(c *gin.Context, db *gorm.DB) {
 		return
 	}
 
+	//เขียนเช็ค update 
 	// 4. ถ้าทุกอย่างสำเร็จ ให้ Commit Transaction
 	if err := tx.Commit().Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "failed to commit transaction"})

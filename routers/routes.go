@@ -56,8 +56,11 @@ func SetupRouter(r *gin.Engine, db *gorm.DB) {
 	r.GET("/rewards/check", func(c *gin.Context) {
 		handlers.CheckUserLotto(c, db)
 	})
+	r.POST("/rewards/cashIn", func(c *gin.Context) {
+		handlers.CashIn(c, db)
+	})
 
-	//ของกุที่เพิ่มาใหม่
+	//admin
 	r.POST("/lotto/generate", func(c *gin.Context) {
 		handlersadmin.InsertLotto(c, db)
 	})
@@ -78,10 +81,12 @@ func SetupRouter(r *gin.Engine, db *gorm.DB) {
 	})
 
 	r.GET("/rewards/generate-preview", func(c *gin.Context) {
-		 handlersadmin.GenerateRewardsPreview(c, db) })
+		handlersadmin.GenerateRewardsPreview(c, db)
+	})
 
-	r.POST("/rewards/release", func(c *gin.Context) { 
-		handlersadmin.ReleaseRewards(c, db) })
+	r.POST("/rewards/release", func(c *gin.Context) {
+		handlersadmin.ReleaseRewards(c, db)
+	})
 
 	r.GET("/rewards/currsent", func(c *gin.Context) {
 		handlersadmin.GetCurrentRewards(c, db)
