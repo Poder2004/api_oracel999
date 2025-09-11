@@ -93,4 +93,7 @@ func SetupRouter(r *gin.Engine, db *gorm.DB) {
 
 	})
 
+	r.POST("/clearData", func(c *gin.Context) {
+		handlersadmin.ClearDataHandler(c, db)
+	})
 }
