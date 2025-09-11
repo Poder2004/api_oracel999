@@ -1,0 +1,167 @@
+package handlers
+
+import (
+	"fmt" // เพิ่ม: import ที่จำเป็น
+	"net/http"
+	"strings"
+
+	"my-go-project/models"
+
+	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
+)
+
+// --- Struct สำหรับ Response ของ /rewards/latest ---
+type LatestRewardsResponse struct {
+	Prize1 []string `json:"prize_1"`
+	Prize2 []string `json:"prize_2"`
+	Prize3 []string `json:"prize_3"`
+	Last3  string   `json:"last_3"`
+	Last2  string   `json:"last_2"`
+}
+
+// GET /rewards/latest - ดึงผลรางวัลล่าสุดทั้งหมด
+func GetLatestRewards(c *gin.Context, db *gorm.DB) {
+	var rewards []struct {
+		LottoNumber string
+		PrizeTier   int
+	}
+
+	if err := db.Table("rewards").
+		Select("lotto.lotto_number, rewards.prize_tier").
+		Joins("JOIN lotto ON lotto.lotto_id = rewards.lotto_id").
+		Order("rewards.prize_tier ASC").
+		Scan(&rewards).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "database error"})
+		return
+	}
+
+	resp := LatestRewardsResponse{
+		Prize1: []string{},
+		Prize2: []string{},
+		Prize3: []string{},
+	}
+
+	for _, r := range rewards {
+		switch r.PrizeTier {
+		case 1:
+			resp.Prize1 = append(resp.Prize1, r.LottoNumber)
+		case 2:
+			resp.Prize2 = append(resp.Prize2, r.LottoNumber)
+		case 3:
+			resp.Prize3 = append(resp.Prize3, r.LottoNumber)
+		case 5:
+			if len(r.LottoNumber) == 6 {
+				resp.Last2 = r.LottoNumber[4:]
+			}
+		}
+	}
+
+	if len(resp.Prize1) > 0 {
+		prize1Number := resp.Prize1[0]
+		if len(prize1Number) == 6 {
+			resp.Last3 = prize1Number[3:]
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status": "success",
+		"data":   resp,
+	})
+}
+
+// --- Struct สำหรับ Response ของ /rewards/check (อัปเดต) ---
+type CheckResult struct {
+	IsWinner    bool    `json:"is_winner"`
+	PrizeTier   int     `json:"prize_tier"`
+	PrizeMoney  float64 `json:"prize_money"`
+	Message     string  `json:"message"`
+	LottoNumber string  `json:"lotto_number"`
+}
+
+// GET /rewards/check?number=123456 - ตรวจสอบสลากของผู้ใช้
+func CheckUserLotto(c *gin.Context, db *gorm.DB) {
+	// --- 1. ส่วนประกาศตัวแปรที่หายไป ---
+	userNumber := c.Query("number")
+	if len(userNumber) != 6 {
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "number must be 6 digits"})
+		return
+	}
+
+	var winningLottos []models.Reward
+	if err := db.Preload("Lotto").Find(&winningLottos).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "could not fetch rewards"})
+		return
+	}
+
+	var prize1Number string
+	var prize5Number string
+	// --- สิ้นสุดส่วนที่หายไป ---
+
+	// --- 2. ส่วนโค้ดที่คุณส่งมา (ตอนนี้จะทำงานได้แล้ว) ---
+	// ตรวจรางวัลใหญ่ (6 ตัวตรง)
+	for _, winningLotto := range winningLottos {
+		if winningLotto.Lotto != nil && winningLotto.Lotto.LottoNumber == userNumber {
+			c.JSON(http.StatusOK, gin.H{
+				"status": "success",
+				"data": CheckResult{
+					IsWinner:    true,
+					PrizeTier:   winningLotto.PrizeTier,
+					PrizeMoney:  winningLotto.PrizeMoney,
+					Message:     fmt.Sprintf("คุณถูกลอตเตอรี่ รางวัลที่ %d", winningLotto.PrizeTier),
+					LottoNumber: userNumber,
+				},
+			})
+			return
+		}
+		if winningLotto.PrizeTier == 1 && winningLotto.Lotto != nil {
+			prize1Number = winningLotto.Lotto.LottoNumber
+		}
+		if winningLotto.PrizeTier == 5 && winningLotto.Lotto != nil && len(winningLotto.Lotto.LottoNumber) == 6 {
+			prize5Number = winningLotto.Lotto.LottoNumber[4:]
+		}
+	}
+
+	// ตรวจเลขท้าย 3 ตัว (รางวัลที่ 4)
+	if prize1Number != "" && len(prize1Number) == 6 {
+		if strings.HasSuffix(userNumber, prize1Number[3:]) {
+			c.JSON(http.StatusOK, gin.H{
+				"status": "success",
+				"data": CheckResult{
+					IsWinner:    true,
+					PrizeTier:   4,
+					PrizeMoney:  4000,
+					Message:     "คุณถูกรางวัลเลขท้าย 3 ตัว",
+					LottoNumber: userNumber,
+				},
+			})
+			return
+		}
+	}
+	// ตรวจเลขท้าย 2 ตัว (รางวัลที่ 5)
+	if prize5Number != "" {
+		if strings.HasSuffix(userNumber, prize5Number) {
+			c.JSON(http.StatusOK, gin.H{
+				"status": "success",
+				"data": CheckResult{
+					IsWinner:    true,
+					PrizeTier:   5,
+					PrizeMoney:  2000,
+					Message:     "คุณถูกรางวัลเลขท้าย 2 ตัว",
+					LottoNumber: userNumber,
+				},
+			})
+			return
+		}
+	}
+
+	// ถ้าไม่ถูกอะไรเลย
+	c.JSON(http.StatusOK, gin.H{
+		"status": "success",
+		"data": CheckResult{
+			IsWinner:    false,
+			Message:     "อาจจะยังก่อนน๊า คุณไม่ถูกรางวัล",
+			LottoNumber: userNumber,
+		},
+	})
+}
