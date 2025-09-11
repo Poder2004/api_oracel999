@@ -20,22 +20,31 @@ type LatestRewardsResponse struct {
 	Last2  string   `json:"last_2"`
 }
 
-// GET /rewards/latest - ดึงผลรางวัลล่าสุดทั้งหมด
+//- ดึงผลรางวัลล่าสุดทั้งหมด
 func GetLatestRewards(c *gin.Context, db *gorm.DB) {
+
 	var rewards []struct {
 		LottoNumber string
 		PrizeTier   int
 	}
 
-	if err := db.Table("rewards").
-		Select("lotto.lotto_number, rewards.prize_tier").
-		Joins("JOIN lotto ON lotto.lotto_id = rewards.lotto_id").
-		Order("rewards.prize_tier ASC").
-		Scan(&rewards).Error; err != nil {
+	const sql = `
+		SELECT
+			lotto.lotto_number,
+			rewards.prize_tier
+		FROM
+			rewards
+		JOIN lotto ON lotto.lotto_id = rewards.lotto_id
+		ORDER BY
+			rewards.prize_tier ASC`
+
+	// Execute คำสั่ง SQL และ Scan ผลลัพธ์
+	if err := db.Raw(sql).Scan(&rewards).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "database error"})
 		return
 	}
 
+	// --- ส่วนของการประมวลผลเพื่อสร้าง Response  ---
 	resp := LatestRewardsResponse{
 		Prize1: []string{},
 		Prize2: []string{},
@@ -50,13 +59,14 @@ func GetLatestRewards(c *gin.Context, db *gorm.DB) {
 			resp.Prize2 = append(resp.Prize2, r.LottoNumber)
 		case 3:
 			resp.Prize3 = append(resp.Prize3, r.LottoNumber)
-		case 5:
+		case 5: // Tier 5 คือเลขท้าย 2 ตัว
 			if len(r.LottoNumber) == 6 {
 				resp.Last2 = r.LottoNumber[4:]
 			}
 		}
 	}
 
+	// เลขท้าย 3 ตัวมาจากรางวัลที่ 1
 	if len(resp.Prize1) > 0 {
 		prize1Number := resp.Prize1[0]
 		if len(prize1Number) == 6 {
@@ -79,7 +89,7 @@ type CheckResult struct {
 	LottoNumber string  `json:"lotto_number"`
 }
 
-// GET /rewards/check?number=123456 - ตรวจสอบสลากของผู้ใช้
+// - ตรวจสอบสลากของผู้ใช้
 func CheckUserLotto(c *gin.Context, db *gorm.DB) {
 	// --- 1. ส่วนประกาศตัวแปรที่หายไป ---
 	userNumber := c.Query("number")
