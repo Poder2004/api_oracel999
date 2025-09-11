@@ -17,7 +17,7 @@ import (
 
 func GetAllLotto(c *gin.Context, db *gorm.DB) {
 
-	const sql = "SELECT * FROM lottos ORDER BY lotto_id ASC"
+	const sql = "SELECT * FROM lotto ORDER BY lotto_id ASC"
 
 	// 2. Execute คำสั่ง SQL และ Scan ผลลัพธ์ลงใน slice `items`
 	var items []models.Lotto
@@ -86,7 +86,7 @@ func InsertLotto(c *gin.Context, db *gorm.DB) {
 		var sqlBuilder strings.Builder
 
 		// สำหรับ MySQL, "INSERT IGNORE" คือวิธีที่ง่ายที่สุดในการทำ "Do Nothing" on conflict
-		sqlBuilder.WriteString("INSERT IGNORE INTO lottos (lotto_number, status, price, created_by) VALUES ")
+		sqlBuilder.WriteString("INSERT IGNORE INTO lotto (lotto_number, status, price, created_by) VALUES ")
 
 		// 2. สร้าง placeholders '(?,?,?,?)' และ arguments สำหรับแต่ละรายการใน batch
 		for i, item := range batch {
