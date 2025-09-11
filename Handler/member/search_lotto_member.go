@@ -36,7 +36,7 @@ func SearchLottoByNumber(c *gin.Context, db *gorm.DB) {
 	var args []interface{}
 
 	// 2. เริ่มสร้างคำสั่ง SQL พื้นฐาน
-	sql := "SELECT * FROM lottos"
+	sql := "SELECT * FROM lotto"
 
 	// 3. สร้าง WHERE clause แบบ Dynamic
 	var whereClauses []string // เก็บเงื่อนไขแต่ละอัน
@@ -80,7 +80,7 @@ func RandomLotto(c *gin.Context, db *gorm.DB) {
 
 	// 1. เตรียมตัวแปรสำหรับเก็บ arguments และคำสั่ง SQL พื้นฐาน
 	var args []interface{}
-	sql := "SELECT * FROM lottos"
+	sql := "SELECT * FROM lotto"
 
 	// 2. เพิ่มเงื่อนไข WHERE แบบ Dynamic
 	// ถ้าผู้ใช้ต้องการเฉพาะสถานะ 'sell' ให้เพิ่ม WHERE clause เข้าไป

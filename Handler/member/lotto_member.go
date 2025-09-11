@@ -17,7 +17,7 @@ func LottoLucky(c *gin.Context, db *gorm.DB) {
 
 	const luckyLottoCount = 3
 
-	const sql = "SELECT * FROM lottos WHERE status = ? ORDER BY RAND() LIMIT ?"
+	const sql = "SELECT * FROM lotto WHERE status = ? ORDER BY RAND() LIMIT ?"
 
 	var items []models.Lotto
 	if err := db.Raw(sql, "sell", luckyLottoCount).Scan(&items).Error; err != nil {
@@ -37,7 +37,7 @@ func LottoAuspicious(c *gin.Context, db *gorm.DB) {
 
 	const luckyLottoCount = 3
 
-	const sql = "SELECT * FROM lottos WHERE status = ? ORDER BY RAND() LIMIT ?"
+	const sql = "SELECT * FROM lotto WHERE status = ? ORDER BY RAND() LIMIT ?"
 
 	var items []models.Lotto
 	if err := db.Raw(sql, "sell", luckyLottoCount).Scan(&items).Error; err != nil {
