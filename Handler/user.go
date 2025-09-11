@@ -68,13 +68,13 @@ func LoginHandler(c *gin.Context, db *gorm.DB) {
 		return
 	}
 
-	// ตรวจรหัสผ่าน 
+	// ตรวจรหัสผ่าน
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(input.Password)); err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"status": "error", "message": "Invalid email or password"})
 		return
 	}
 
-	// ส่งกลับ 
+	// ส่งกลับ
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "success",
 		"message": "Login successful",
@@ -97,10 +97,15 @@ func Profile(c *gin.Context, db *gorm.DB) {
 	}
 
 	var user models.User
-	if err := db.First(&user, userID).Error; err != nil {
+	// --- ส่วนที่แก้ไข ---
+	// เตรียมคำสั่ง SQL
+	sql := "SELECT username, email FROM users WHERE user_id = ?"
+	// ใช้ db.Raw() และ .Scan() เพื่อรันคำสั่ง SQL นั้น
+	if err := db.Raw(sql, userID).Scan(&user).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 		return
 	}
+	// --- สิ้นสุดส่วนที่แก้ไข ---
 
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "success",
@@ -121,10 +126,15 @@ func Wallet(c *gin.Context, db *gorm.DB) {
 	}
 
 	var user models.User
-	if err := db.First(&user, userID).Error; err != nil {
+	// --- ส่วนที่แก้ไข ---
+	// เตรียมคำสั่ง SQL ที่ต้องการ
+	sql := "SELECT wallet FROM users WHERE user_id = ?"
+	// สั่งให้ GORM รันคำสั่ง SQL นี้ แล้วนำผลลัพธ์มาใส่ในตัวแปร user
+	if err := db.Raw(sql, userID).Scan(&user).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 		return
 	}
+	// --- สิ้นสุดส่วนที่แก้ไข ---
 
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "success",
