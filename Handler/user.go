@@ -67,15 +67,14 @@ func LoginHandler(c *gin.Context, db *gorm.DB) {
 		c.JSON(http.StatusUnauthorized, gin.H{"status": "error", "message": "Invalid email or password"})
 		return
 	}
-	// --- สิ้นสุดส่วนที่เปลี่ยนไป ---
 
-	// ตรวจรหัสผ่าน (ส่วนนี้เหมือนเดิม)
+	// ตรวจรหัสผ่าน 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(input.Password)); err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"status": "error", "message": "Invalid email or password"})
 		return
 	}
 
-	// ตอบกลับ (ไม่ส่ง password) (ส่วนนี้เหมือนเดิม)
+	// ส่งกลับ 
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "success",
 		"message": "Login successful",
