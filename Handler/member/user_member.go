@@ -10,7 +10,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// RegisterHandler รับคำขอสมัครสมาชิก (แบบใช้ Raw SQL)
+// RegisterHandler รับคำขอสมัครสมาชิก
 func RegisterHandler(c *gin.Context, db *gorm.DB) {
 	var json models.User
 	if err := c.ShouldBindJSON(&json); err != nil {
@@ -45,7 +45,7 @@ func RegisterHandler(c *gin.Context, db *gorm.DB) {
 	}
 }
 
-// LoginHandler รับคำขอล็อกอิน (เวอร์ชันใช้ Raw SQL)
+// LoginHandler รับคำขอล็อกอิน 
 func LoginHandler(c *gin.Context, db *gorm.DB) {
 	var input struct {
 		Email    string `json:"email" binding:"required,email"`
@@ -56,14 +56,10 @@ func LoginHandler(c *gin.Context, db *gorm.DB) {
 		return
 	}
 
-	// --- ส่วนที่เปลี่ยนไป ---
-	// 1. เตรียมตัวแปร user และคำสั่ง SQL
 	var user models.User
 	sql := "SELECT * FROM users WHERE email = ?"
 
-	// 2. ใช้ db.Raw() เพื่อรันคำสั่ง SQL และ .Scan() เพื่อนำผลลัพธ์ใส่ในตัวแปร user
 	if err := db.Raw(sql, input.Email).Scan(&user).Error; err != nil {
-		// หากไม่พบข้อมูล (gorm.ErrRecordNotFound) หรือเกิดข้อผิดพลาดอื่น
 		c.JSON(http.StatusUnauthorized, gin.H{"status": "error", "message": "Invalid email or password"})
 		return
 	}
