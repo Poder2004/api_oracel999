@@ -20,6 +20,6 @@ func main() {
 	// เรียกใช้ routes จาก package routers
 	routers.SetupRouter(r, db)
 
-	// เริ่มรันเซิร์ฟเวอร์
-	r.Run(":8080")
+	// // เริ่มรันเซิร์ฟเวอร์
+	// r.Run(":8080")
 }
