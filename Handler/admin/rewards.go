@@ -51,10 +51,11 @@ func GenerateRewardsPreview(c *gin.Context, db *gorm.DB) {
 
 	// 3. จัดเรียงข้อมูลเพื่อส่งกลับไปให้ Admin ดู
 	previews := []RewardPreview{
-		{PrizeTier: 1, PrizeMoney: 6000000.00, WinningLotto: lottos[0]},
-		{PrizeTier: 2, PrizeMoney: 100000.00, WinningLotto: lottos[1]},
-		{PrizeTier: 3, PrizeMoney: 80000.00,  WinningLotto: lottos[2]},
-		{PrizeTier: 5, PrizeMoney: 2000.00,   WinningLotto: lottos[3]},
+		{PrizeTier: 1, PrizeMoney: 0.00, WinningLotto: lottos[0]},
+		{PrizeTier: 2, PrizeMoney: 0.00, WinningLotto: lottos[1]},
+		{PrizeTier: 3, PrizeMoney: 0.00,  WinningLotto: lottos[2]},
+		{PrizeTier: 4, PrizeMoney: 0.00,  WinningLotto: lottos[0]},
+		{PrizeTier: 5, PrizeMoney: 0.00,   WinningLotto: lottos[3]},
 	}
 
 	c.JSON(http.StatusOK, gin.H{
