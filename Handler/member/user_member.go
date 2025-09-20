@@ -10,7 +10,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// RegisterHandler รับคำขอสมัครสมาชิก (แบบใช้ Raw SQL)
+// RegisterHandler รับคำขอสมัครสมาชิก
 func RegisterHandler(c *gin.Context, db *gorm.DB) {
 	var json models.User
 	if err := c.ShouldBindJSON(&json); err != nil {
@@ -24,7 +24,7 @@ func RegisterHandler(c *gin.Context, db *gorm.DB) {
 		return
 	}
 
-	//คำสั่ง SQL
+	
 	sql := "INSERT INTO users (username, email, password, wallet) VALUES (?, ?, ?, ?)"
 	result := db.Exec(sql, json.Username, json.Email, string(encryptedPassword), json.Wallet)
 	if result.Error != nil {
