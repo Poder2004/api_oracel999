@@ -93,10 +93,9 @@ func Profile(c *gin.Context, db *gorm.DB) {
 	}
 
 	var user models.User
-	// --- ส่วนที่แก้ไข ---
-	// เตรียมคำสั่ง SQL
+
 	sql := "SELECT username, email FROM users WHERE user_id = ?"
-	// ใช้ db.Raw() และ .Scan() เพื่อรันคำสั่ง SQL นั้น
+
 	if err := db.Raw(sql, userID).Scan(&user).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 		return
@@ -122,15 +121,13 @@ func Wallet(c *gin.Context, db *gorm.DB) {
 	}
 
 	var user models.User
-	// --- ส่วนที่แก้ไข ---
-	// เตรียมคำสั่ง SQL ที่ต้องการ
+	
 	sql := "SELECT wallet FROM users WHERE user_id = ?"
-	// สั่งให้ GORM รันคำสั่ง SQL นี้ แล้วนำผลลัพธ์มาใส่ในตัวแปร user
+
 	if err := db.Raw(sql, userID).Scan(&user).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 		return
 	}
-	// --- สิ้นสุดส่วนที่แก้ไข ---
 
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "success",
