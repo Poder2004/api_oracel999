@@ -88,7 +88,7 @@ func CreatePurchase(c *gin.Context, db *gorm.DB) {
 			return errNotAvailable
 		}
 
-		// --- ส่วนของการรวมราคาและเตรียมรายการตอบกลับ ---
+		// --- รวมราคา และเตรียม response ---
 		for _, l := range lottos {
 			totalPrice += l.Price
 			respItems = append(respItems, map[string]any{
@@ -111,7 +111,7 @@ func CreatePurchase(c *gin.Context, db *gorm.DB) {
 		}
 		purchaseID = p.PurchaseID // GORM จะใส่ ID ที่เพิ่งสร้างให้เราอัตโนมัติ
 
-		//  สร้างรายละเอียดบิล (ใช้ Create เพื่อทำ Batch Insert)
+		//  สร้างรายละเอียดบิล 
 		details := make([]models.PurchaseDetail, 0, len(lottos))
 		for _, l := range lottos {
 			details = append(details, models.PurchaseDetail{
