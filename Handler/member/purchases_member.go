@@ -16,8 +16,8 @@ import (
 // ---------- Request Models ----------
 type BuyRequest struct {
 	UserID      uint     `json:"user_id"  binding:"required"`
-	LottoIDs    []uint   `json:"lotto_ids" binding:"required,min=1"` // เฉพาะใบที่ผู้ใช้ติ๊กเลือก
-	ClientTotal *float64 `json:"client_total,omitempty"`             // (optional) ส่งมาเทียบได้ แต่เซิร์ฟเวอร์คำนวณเองเสมอ
+	LottoIDs    []uint   `json:"lotto_ids" binding:"required,min=1"`
+	ClientTotal *float64 `json:"client_total,omitempty"` // (optional) ส่งมาเทียบได้ แต่เซิร์ฟเวอร์คำนวณเองเสมอ
 }
 
 // ---------- ซื้อจริง (INSERT ทั้งบิล) ----------
@@ -32,13 +32,13 @@ func CreatePurchase(c *gin.Context, db *gorm.DB) {
 	}
 
 	var user models.User
-	// [Raw SQL] ตรวจสอบว่ามีผู้ใช้นี้จริง
+	// ตรวจสอบว่ามีผู้ใช้นี้จริง
 	if err := db.Raw("SELECT * FROM users WHERE user_id = ?", req.UserID).Scan(&user).Error; err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "user not found"})
 		return
 	}
 
-	// --- ส่วนของการตัด ID ซ้ำ  ---
+	//ส่วนของการตัด ID ซ้ำ  ---
 	idset := map[uint]struct{}{}
 	uniq := make([]uint, 0, len(req.LottoIDs))
 	for _, id := range req.LottoIDs {
@@ -59,21 +59,22 @@ func CreatePurchase(c *gin.Context, db *gorm.DB) {
 	var (
 		purchaseID   uint
 		totalPrice   float64
-		respItems    []map[string]any
-		notAvailable []uint
+		respItems    []map[string]any //รายการสลากที่ซื้อสำเร็จ
+		notAvailable []uint           //id ที่ไม่สามารถซื้อได้ (ถูกคนอื่นซื้อแล้ว)
 	)
 
 	// ---------- เริ่ม Transaction ----------
+	//ใช้ Transaction เพื่อให้ทุกขั้นตอน (ตรวจสอบ, insert, update, หักเงิน) ต้องสำเร็จพร้อมกัน
+	//ถ้ามี error → rollback ย้อนกลับทั้งหมด
 	err := db.Transaction(func(tx *gorm.DB) error {
-		// [Raw SQL] 1. ล็อกแถวลอตเตอรี่ที่กำลังจะซื้อ (กันคนอื่นซื้อตัดหน้า)
-		// "FOR UPDATE" เป็นคำสั่งของ SQL สำหรับการล็อกแถว
+
 		var lottos []models.Lotto
 		lockSQL := "SELECT * FROM lotto WHERE lotto_id IN (?) AND status = ? ORDER BY lotto_id ASC FOR UPDATE"
 		if err := tx.Raw(lockSQL, uniq, "sell").Scan(&lottos).Error; err != nil {
 			return err
 		}
 
-		// --- ส่วนของการตรวจสอบว่าใบที่ต้องการซื้อยังอยู่ครบไหม  ---
+		// --- ตรวจสอบว่าสลากครบไหม  ---
 		if len(lottos) != len(uniq) {
 			found := make(map[uint]struct{}, len(lottos))
 			for _, l := range lottos {
@@ -100,8 +101,7 @@ func CreatePurchase(c *gin.Context, db *gorm.DB) {
 			return respItems[i]["lotto_id"].(uint) < respItems[j]["lotto_id"].(uint)
 		})
 
-		// [GORM] 2. สร้างหัวบิล (ใช้ Create เพื่อให้ได้ PurchaseID กลับมา)
-		// ดูคำอธิบายด้านล่างว่าทำไมส่วนนี้ถึงยังใช้ Create()
+		//  สร้างหัวบิล (ใช้ Create เพื่อให้ได้ PurchaseID กลับมา)
 		p := models.Purchase{
 			UserID:     req.UserID,
 			TotalPrice: totalPrice,
@@ -111,7 +111,7 @@ func CreatePurchase(c *gin.Context, db *gorm.DB) {
 		}
 		purchaseID = p.PurchaseID // GORM จะใส่ ID ที่เพิ่งสร้างให้เราอัตโนมัติ
 
-		// [GORM] 3. สร้างรายละเอียดบิล (ใช้ Create เพื่อทำ Batch Insert)
+		//  สร้างรายละเอียดบิล (ใช้ Create เพื่อทำ Batch Insert)
 		details := make([]models.PurchaseDetail, 0, len(lottos))
 		for _, l := range lottos {
 			details = append(details, models.PurchaseDetail{
@@ -123,13 +123,13 @@ func CreatePurchase(c *gin.Context, db *gorm.DB) {
 			return err
 		}
 
-		// [Raw SQL] 4. เปลี่ยนสถานะลอตเตอรี่เป็น "sold"
+		// เปลี่ยนสถานะลอตเตอรี่เป็น "sold"
 		updateStatusSQL := "UPDATE lotto SET status = ? WHERE lotto_id IN (?)"
 		if err := tx.Exec(updateStatusSQL, "sold", uniq).Error; err != nil {
 			return err
 		}
 
-		// [Raw SQL] 5. หักเงินในกระเป๋า (wallet)
+		//  หักเงินในกระเป๋า (wallet)
 		if user.Wallet < totalPrice {
 			return errors.New("ยอดเงินในกระเป๋าไม่เพียงพอ")
 		}
@@ -138,7 +138,7 @@ func CreatePurchase(c *gin.Context, db *gorm.DB) {
 			return err
 		}
 
-		// [Raw SQL] 6. ดึงยอดเงินในกระเป๋าใหม่หลังหักเงิน
+		//  ดึงยอดเงินในกระเป๋าใหม่หลังหักเงิน
 		selectWalletSQL := "SELECT wallet FROM users WHERE user_id = ?"
 		if err := tx.Raw(selectWalletSQL, req.UserID).Scan(&user).Error; err != nil {
 			return err
@@ -174,7 +174,9 @@ func CreatePurchase(c *gin.Context, db *gorm.DB) {
 // ---------- ดึงรายการสลากที่ผู้ใช้ซื้อ ----------
 
 func ListPurchasedLottosByUser(c *gin.Context, db *gorm.DB) {
-	// --- ส่วนของการรับและตรวจสอบ Input (เหมือนเดิม) ---
+	// --- ส่วนของการรับและตรวจสอบ Input---
+	// 	Path Parameter เช่น /users/purchases/5
+	// Query String เช่น /users/purchases?user_id=5
 	uidStr := c.Param("user_id")
 	if uidStr == "" {
 		uidStr = c.Query("user_id")
@@ -185,9 +187,7 @@ func ListPurchasedLottosByUser(c *gin.Context, db *gorm.DB) {
 		return
 	}
 
-	// --- ส่วนที่เปลี่ยนมาใช้ db.Raw() ---
-
-	// 1. กำหนด struct สำหรับรับข้อมูล (เหมือนเดิม)
+	// กำหนด struct สำหรับรับข้อมูล
 	type Row struct {
 		LottoID   uint   `json:"lotto_id"`
 		LottoName string `json:"lotto_name"`
@@ -195,8 +195,6 @@ func ListPurchasedLottosByUser(c *gin.Context, db *gorm.DB) {
 	}
 	var rows []Row
 
-	// 2. เขียนคำสั่ง SQL ทั้งหมดลงในสตริงเดียว
-	//    เป็นการนำ .Select, .Table, .Joins, .Where, .Order มารวมกัน
 	const sql = `
 		SELECT
 			l.lotto_id,
@@ -211,13 +209,13 @@ func ListPurchasedLottosByUser(c *gin.Context, db *gorm.DB) {
 		ORDER BY
 			pd.pd_id ASC`
 
-	// 3. Execute คำสั่ง SQL และ Scan ผลลัพธ์ลงใน slice `rows`
+	// Execute คำสั่ง SQL และ Scan ผลลัพธ์ลงใน slice `rows`
 	if err := db.Raw(sql, uid).Scan(&rows).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": err.Error()})
 		return
 	}
 
-	// --- ส่วนของการตอบกลับ (เหมือนเดิม) ---
+	// --- ส่วนของการตอบกลับ  ---
 	c.JSON(http.StatusOK, gin.H{
 		"status": "success",
 		"total":  len(rows),
