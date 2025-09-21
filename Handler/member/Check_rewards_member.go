@@ -112,6 +112,7 @@ func CheckUserLotto(c *gin.Context, db *gorm.DB) {
 }
 
 // ใช้ CashInRequest struct
+// ใช้ CashInRequest struct
 type CashInRequest struct {
 	UserID      uint   `json:"user_id"`
 	LottoNumber string `json:"lotto_number"`
@@ -120,12 +121,13 @@ type CashInRequest struct {
 func CashIn(c *gin.Context, db *gorm.DB) {
 	var req CashInRequest
 
+	// --- 1. Bind JSON ---
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request data"})
 		return
 	}
 
-	// 1. หา Lotto จากหมายเลข
+	// --- 2. หา Lotto จากหมายเลข ---
 	var lotto models.Lotto
 	result := db.Raw("SELECT lotto_id FROM lotto WHERE lotto_number = ? LIMIT 1", req.LottoNumber).Scan(&lotto)
 	if result.Error != nil || result.RowsAffected == 0 {
@@ -133,7 +135,7 @@ func CashIn(c *gin.Context, db *gorm.DB) {
 		return
 	}
 
-	// 2. ตรวจสอบว่า User เป็นเจ้าของ Lotto ใบนี้จริงหรือไม่ และดึง status cash_in มาด้วย
+	// --- 3. ตรวจสอบว่า User เป็นเจ้าของ Lotto ใบนี้จริงหรือไม่ และดึง cash_in มาด้วย ---
 	type PDRow struct {
 		PDID   uint
 		CashIn string
@@ -155,30 +157,89 @@ func CashIn(c *gin.Context, db *gorm.DB) {
 		return
 	}
 
-	// 3. ตรวจสอบว่า Lotto ใบนี้ถูกรางวัลจริงหรือไม่
+	// --- 4. ตรวจสอบว่าถูกรางวัลหรือไม่ ---
 	var reward models.Reward
 	result = db.Raw("SELECT * FROM rewards WHERE lotto_id = ? LIMIT 1", lotto.LottoID).Scan(&reward)
-	if result.Error != nil || result.RowsAffected == 0 {
+
+	userNumber := req.LottoNumber
+	isWinner := false
+	prizeTier := 0
+	prizeMoney := float64(0)
+
+	// case 1: รางวัลตรง (รางวัลที่ 1–3)
+	if result.Error == nil && result.RowsAffected > 0 {
+		if reward.PrizeTier >= 1 && reward.PrizeTier <= 3 {
+			isWinner = true
+			prizeTier = reward.PrizeTier
+			prizeMoney = reward.PrizeMoney
+		}
+	}
+
+	// case 2: รางวัลเลขท้าย (รางวัลที่ 4–5)
+	if !isWinner {
+		var allRewards []models.Reward
+		if err := db.Preload("Lotto").Find(&allRewards).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch reward numbers"})
+			return
+		}
+
+		var prize1Number string
+		var prize1Money float64
+		var prize5Number string
+		var prize5Money float64
+
+		for _, r := range allRewards {
+			if r.PrizeTier == 1 && r.Lotto != nil {
+				prize1Number = r.Lotto.LottoNumber
+				prize1Money = r.PrizeMoney
+			}
+			if r.PrizeTier == 5 && r.Lotto != nil && len(r.Lotto.LottoNumber) == 6 {
+				prize5Number = r.Lotto.LottoNumber[4:]
+				prize5Money = r.PrizeMoney
+			}
+		}
+
+		// ตรวจรางวัลที่ 4 (เลขท้าย 3 ตัว)
+		if prize1Number != "" && len(prize1Number) == 6 {
+			if strings.HasSuffix(userNumber, prize1Number[3:]) {
+				isWinner = true
+				prizeTier = 4
+				prizeMoney = prize1Money
+			}
+		}
+
+		// ตรวจรางวัลที่ 5 (เลขท้าย 2 ตัว)
+		if !isWinner && prize5Number != "" {
+			if strings.HasSuffix(userNumber, prize5Number) {
+				isWinner = true
+				prizeTier = 5
+				prizeMoney = prize5Money
+			}
+		}
+	}
+
+	// ถ้าไม่ถูกรางวัลเลย
+	if !isWinner {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "This ticket is not a winning ticket"})
 		return
 	}
 
-	// 4. Transaction เริ่ม
+	// --- 5. Transaction ---
 	tx := db.Begin()
 	if tx.Error != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to start transaction"})
 		return
 	}
 
-	// 5. อัปเดต Wallet ของ User
-	err := tx.Exec("UPDATE users SET wallet = wallet + ? WHERE user_id = ?", reward.PrizeMoney, req.UserID).Error
+	// อัปเดต Wallet ของ User
+	err := tx.Exec("UPDATE users SET wallet = wallet + ? WHERE user_id = ?", prizeMoney, req.UserID).Error
 	if err != nil {
 		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update user wallet"})
 		return
 	}
 
-	// 6. อัปเดต purchases_detail.cash_in = 'ขึ้นเงิน'
+	// อัปเดต purchases_detail.cash_in = 'ขึ้นเงิน'
 	err = tx.Exec("UPDATE purchases_detail SET cash_in = ? WHERE pd_id = ?", "ขึ้นเงิน", pd.PDID).Error
 	if err != nil {
 		tx.Rollback()
@@ -186,15 +247,15 @@ func CashIn(c *gin.Context, db *gorm.DB) {
 		return
 	}
 
-	// 7. Commit Transaction
+	// Commit
 	if err := tx.Commit().Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to commit transaction"})
 		return
 	}
 
-	// 8. Response สำเร็จ
+	// --- 6. Response สำเร็จ ---
 	c.JSON(http.StatusOK, gin.H{
-		"message":     "Prize claimed successfully!",
-		"prize_money": reward.PrizeMoney,
+		"message":     fmt.Sprintf("Prize claimed successfully! (Tier %d)", prizeTier),
+		"prize_money": prizeMoney,
 	})
 }
