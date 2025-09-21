@@ -37,6 +37,8 @@ func CheckUserLotto(c *gin.Context, db *gorm.DB) {
 
 	var prize1Number string
 	var prize5Number string
+	var prize1Money float64
+	var prize5Money float64
 
 	// ตรวจรางวัลใหญ่ (6 ตัวตรง)
 	for _, winningLotto := range winningLottos {
@@ -55,9 +57,11 @@ func CheckUserLotto(c *gin.Context, db *gorm.DB) {
 		}
 		if winningLotto.PrizeTier == 1 && winningLotto.Lotto != nil {
 			prize1Number = winningLotto.Lotto.LottoNumber
+			prize1Money = winningLotto.PrizeMoney
 		}
 		if winningLotto.PrizeTier == 5 && winningLotto.Lotto != nil && len(winningLotto.Lotto.LottoNumber) == 6 {
 			prize5Number = winningLotto.Lotto.LottoNumber[4:]
+			prize5Money = winningLotto.PrizeMoney
 		}
 	}
 
@@ -69,7 +73,7 @@ func CheckUserLotto(c *gin.Context, db *gorm.DB) {
 				"data": CheckResult{
 					IsWinner:    true,
 					PrizeTier:   4,
-					PrizeMoney:  4000,
+					PrizeMoney:  prize1Money,
 					Message:     "คุณถูกรางวัลเลขท้าย 3 ตัว",
 					LottoNumber: userNumber,
 				},
@@ -85,7 +89,7 @@ func CheckUserLotto(c *gin.Context, db *gorm.DB) {
 				"data": CheckResult{
 					IsWinner:    true,
 					PrizeTier:   5,
-					PrizeMoney:  2000,
+					PrizeMoney:  prize5Money,
 					Message:     "คุณถูกรางวัลเลขท้าย 2 ตัว",
 					LottoNumber: userNumber,
 				},
@@ -105,7 +109,7 @@ func CheckUserLotto(c *gin.Context, db *gorm.DB) {
 	})
 }
 
-// ใช้ CashInRequest struct 
+// ใช้ CashInRequest struct
 type CashInRequest struct {
 	UserID      uint   `json:"user_id"`
 	LottoNumber string `json:"lotto_number"`
@@ -179,12 +183,12 @@ func CashIn(c *gin.Context, db *gorm.DB) {
 		return
 	}
 
-	// Commit Transaction 
+	// Commit Transaction
 	if err := tx.Commit().Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to commit transaction"})
 		return
 	}
-	
+
 	// --- สิ้นสุด Transaction ---
 
 	//  ส่ง Response สำเร็จกลับไป (ส่วนนี้เหมือนเดิม)
