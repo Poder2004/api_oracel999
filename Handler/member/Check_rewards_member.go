@@ -11,16 +11,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// --- Struct สำหรับ Response ของ /rewards/latest ---
-type LatestRewardsResponse struct {
-	Prize1 []string `json:"prize_1"`
-	Prize2 []string `json:"prize_2"`
-	Prize3 []string `json:"prize_3"`
-	Last3  string   `json:"last_3"`
-	Last2  string   `json:"last_2"`
-}
-
-// --- Struct สำหรับ Response ของ /rewards/check (อัปเดต) ---
+// --- Struct สำหรับ Response ---
 type CheckResult struct {
 	IsWinner    bool    `json:"is_winner"`
 	PrizeTier   int     `json:"prize_tier"`
@@ -31,7 +22,7 @@ type CheckResult struct {
 
 // - ตรวจสอบสลากของผู้ใช้
 func CheckUserLotto(c *gin.Context, db *gorm.DB) {
-	// --- 1. ส่วนประกาศตัวแปรที่หายไป ---
+
 	userNumber := c.Query("number")
 	if len(userNumber) != 6 {
 		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "number must be 6 digits"})
@@ -46,9 +37,7 @@ func CheckUserLotto(c *gin.Context, db *gorm.DB) {
 
 	var prize1Number string
 	var prize5Number string
-	// --- สิ้นสุดส่วนที่หายไป ---
 
-	// --- 2. ส่วนโค้ดที่คุณส่งมา (ตอนนี้จะทำงานได้แล้ว) ---
 	// ตรวจรางวัลใหญ่ (6 ตัวตรง)
 	for _, winningLotto := range winningLottos {
 		if winningLotto.Lotto != nil && winningLotto.Lotto.LottoNumber == userNumber {
@@ -116,7 +105,7 @@ func CheckUserLotto(c *gin.Context, db *gorm.DB) {
 	})
 }
 
-// ใช้ CashInRequest struct เดิม
+// ใช้ CashInRequest struct 
 type CashInRequest struct {
 	UserID      uint   `json:"user_id"`
 	LottoNumber string `json:"lotto_number"`
@@ -125,7 +114,6 @@ type CashInRequest struct {
 func CashIn(c *gin.Context, db *gorm.DB) {
 	var req CashInRequest
 
-	// 1. Bind JSON request body (ส่วนนี้เหมือนเดิม)
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request data"})
 		return
@@ -133,7 +121,6 @@ func CashIn(c *gin.Context, db *gorm.DB) {
 
 	// --- เริ่มการตรวจสอบบน Server ---
 
-	// 2. ค้นหา Lotto จากหมายเลขที่ส่งมาด้วย Raw SQL
 	var lotto models.Lotto
 	result := db.Raw("SELECT lotto_id FROM lotto WHERE lotto_number = ? LIMIT 1", req.LottoNumber).Scan(&lotto)
 	if result.Error != nil || result.RowsAffected == 0 {
@@ -141,7 +128,7 @@ func CashIn(c *gin.Context, db *gorm.DB) {
 		return
 	}
 
-	// 3. ตรวจสอบว่า User เป็นเจ้าของ Lotto ใบนี้จริงหรือไม่ด้วย Raw SQL
+	// ตรวจสอบว่า User เป็นเจ้าของ Lotto ใบนี้จริงหรือไม่
 	var purchaseDetailID uint
 	result = db.Raw(`
 		SELECT pd.pd_id 
@@ -155,7 +142,7 @@ func CashIn(c *gin.Context, db *gorm.DB) {
 		return
 	}
 
-	// 4. ตรวจสอบว่า Lotto ใบนี้ถูกรางวัลจริงหรือไม่ด้วย Raw SQL
+	// ตรวจสอบว่า Lotto ใบนี้ถูกรางวัลจริงหรือไม่
 	var reward models.Reward
 	result = db.Raw("SELECT * FROM rewards WHERE lotto_id = ? LIMIT 1", lotto.LottoID).Scan(&reward)
 	if result.Error != nil || result.RowsAffected == 0 {
@@ -163,7 +150,7 @@ func CashIn(c *gin.Context, db *gorm.DB) {
 		return
 	}
 
-	// 5. ตรวจสอบว่าเคยขึ้นเงินรางวัลนี้ไปแล้วหรือยัง (ส่วนนี้เหมือนเดิม)
+	//  ตรวจสอบว่าเคยขึ้นเงินรางวัลนี้ไปแล้วหรือยัง (ส่วนนี้เหมือนเดิม)
 	if reward.Status == "ขึ้นเงิน" {
 		c.JSON(http.StatusConflict, gin.H{"error": "This prize has already been claimed"})
 		return
@@ -176,7 +163,7 @@ func CashIn(c *gin.Context, db *gorm.DB) {
 		return
 	}
 
-	// 6. อัปเดต Wallet ของ User ด้วย tx.Exec()
+	// อัปเดต Wallet ของ User ด้วย tx.Exec()
 	err := tx.Exec("UPDATE users SET wallet = wallet + ? WHERE user_id = ?", reward.PrizeMoney, req.UserID).Error
 	if err != nil {
 		tx.Rollback()
@@ -184,7 +171,7 @@ func CashIn(c *gin.Context, db *gorm.DB) {
 		return
 	}
 
-	// 7. อัปเดตสถานะของรางวัลเป็น "ขึ้นเงิน" ด้วย tx.Exec()
+	//  อัปเดตสถานะของรางวัลเป็น "ขึ้นเงิน" ด้วย tx.Exec()
 	err = tx.Exec("UPDATE rewards SET status = ? WHERE reward_id = ?", "ขึ้นเงิน", reward.RewardID).Error
 	if err != nil {
 		tx.Rollback()
@@ -192,7 +179,7 @@ func CashIn(c *gin.Context, db *gorm.DB) {
 		return
 	}
 
-	// Commit Transaction (ส่วนนี้เหมือนเดิม)
+	// Commit Transaction 
 	if err := tx.Commit().Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to commit transaction"})
 		return
@@ -200,7 +187,7 @@ func CashIn(c *gin.Context, db *gorm.DB) {
 	
 	// --- สิ้นสุด Transaction ---
 
-	// 8. ส่ง Response สำเร็จกลับไป (ส่วนนี้เหมือนเดิม)
+	//  ส่ง Response สำเร็จกลับไป (ส่วนนี้เหมือนเดิม)
 	c.JSON(http.StatusOK, gin.H{
 		"message":     "Prize claimed successfully!",
 		"prize_money": reward.PrizeMoney,
