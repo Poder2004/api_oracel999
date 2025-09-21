@@ -35,7 +35,7 @@ func GenerateRewardsPreview(c *gin.Context, db *gorm.DB) {
 	// 1. สุ่มสลากที่ยังขายอยู่ (status = 'sell') มา 4 ใบ
 	//    สำหรับรางวัลที่ 1, 2, 3, และ 5
 	if err := db.Model(&models.Lotto{}).
-		Where("status = ?", "sell").
+	
 		Order("RAND()").
 		Limit(4).
 		Find(&lottos).Error; err != nil {
