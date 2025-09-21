@@ -89,11 +89,6 @@ func PreviewNewLotto(c *gin.Context) {
 	})
 }
 
-type UpdateItem struct {
-	LottoID     uint   `json:"lotto_id"`
-	LottoNumber string `json:"lotto_number"`
-}
-
 // Reset + Insert ใหม่
 type NewLottoItem struct {
 	LottoNumber string  `json:"lotto_number"`
@@ -106,66 +101,93 @@ type ResetInsertReq struct {
 	Items []NewLottoItem `json:"items"`
 }
 
-func ResetAndInsertLotto(c *gin.Context, db *gorm.DB) {
-	var req ResetInsertReq
-	if err := c.ShouldBindJSON(&req); err != nil || len(req.Items) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "invalid payload"})
-		return
-	}
+// handlersadmin/lotto_handler.go (หรือไฟล์ที่คุณเก็บ handler)
 
-	tx := db.Begin()
-	if tx.Error != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": tx.Error.Error()})
-		return
-	}
+// ClearLottoDataHandler clears all data from the lotto table.
+func ClearLottoDataHandler(c *gin.Context, db *gorm.DB) {
+    // เริ่ม Transaction เพื่อให้แน่ใจว่าการลบและรีเซ็ตจะสำเร็จไปพร้อมกัน
+    tx := db.Begin()
+    if tx.Error != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "failed to begin transaction"})
+        return
+    }
 
-	if err := tx.Exec("DELETE FROM lotto").Error; err != nil {
-		tx.Rollback()
-		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "delete failed: " + err.Error()})
-		return
-	}
+    // 1. ลบข้อมูลทั้งหมดในตาราง lotto
+    if err := tx.Exec("DELETE FROM lotto").Error; err != nil {
+        tx.Rollback() // หากลบไม่สำเร็จ ให้ยกเลิกทั้งหมด
+        c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "delete failed: " + err.Error()})
+        return
+    }
 
-	if err := tx.Exec("ALTER TABLE lotto AUTO_INCREMENT = 1").Error; err != nil {
-		tx.Rollback()
-		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "reset auto_increment failed: " + err.Error()})
-		return
-	}
+    // 2. รีเซ็ต AUTO_INCREMENT กลับไปเริ่มที่ 1
+    if err := tx.Exec("ALTER TABLE lotto AUTO_INCREMENT = 1").Error; err != nil {
+        tx.Rollback() // หากรีเซ็ตไม่สำเร็จ ให้ยกเลิกทั้งหมด
+        c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "reset auto_increment failed: " + err.Error()})
+        return
+    }
 
-	var args []interface{}
-	var sqlBuilder strings.Builder
-	sqlBuilder.WriteString("INSERT INTO lotto (lotto_number, status, price, created_by) VALUES ")
+    // ยืนยันการเปลี่ยนแปลงทั้งหมด
+    if err := tx.Commit().Error; err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "commit failed: " + err.Error()})
+        return
+    }
 
-	for i, item := range req.Items {
-		if i > 0 {
-			sqlBuilder.WriteString(", ")
-		}
-		sqlBuilder.WriteString("(?, ?, ?, ?)")
-		status := item.Status
-		if status == "" {
-			status = "sell"
-		}
-		price := item.Price
-		if price <= 0 {
-			price = 80
-		}
-		args = append(args, item.LottoNumber, status, price, item.CreatedBy)
-	}
-
-	if err := tx.Exec(sqlBuilder.String(), args...).Error; err != nil {
-		tx.Rollback()
-		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "insert failed: " + err.Error()})
-		return
-	}
-
-	if err := tx.Commit().Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"status":   "success",
-		"inserted": len(req.Items),
-	})
+    c.JSON(http.StatusOK, gin.H{
+        "status":  "success",
+        "message": "Lotto data has been cleared.",
+    })
 }
 
+// handlersadmin/lotto_handler.go (หรือไฟล์ที่คุณเก็บ handler)
+
+// InsertLottoHandler inserts a new batch of lotto items.
+func InsertLottoHandler(c *gin.Context, db *gorm.DB) {
+    var req ResetInsertReq
+    if err := c.ShouldBindJSON(&req); err != nil || len(req.Items) == 0 {
+        c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "invalid payload"})
+        return
+    }
+
+    tx := db.Begin()
+    if tx.Error != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "failed to begin transaction"})
+        return
+    }
+
+    var args []interface{}
+    var sqlBuilder strings.Builder
+    sqlBuilder.WriteString("INSERT INTO lotto (lotto_number, status, price, created_by) VALUES ")
+
+    for i, item := range req.Items {
+        if i > 0 {
+            sqlBuilder.WriteString(", ")
+        }
+        sqlBuilder.WriteString("(?, ?, ?, ?)")
+        status := item.Status
+        if status == "" {
+            status = "sell"
+        }
+        price := item.Price
+        if price <= 0 {
+            price = 80
+        }
+        args = append(args, item.LottoNumber, status, price, item.CreatedBy)
+    }
+
+    if err := tx.Exec(sqlBuilder.String(), args...).Error; err != nil {
+        tx.Rollback()
+        c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "insert failed: " + err.Error()})
+        return
+    }
+
+    if err := tx.Commit().Error; err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "commit failed: " + err.Error()})
+        return
+    }
+
+    c.JSON(http.StatusOK, gin.H{
+        "status":   "success",
+        "inserted": len(req.Items),
+    })
+}
 

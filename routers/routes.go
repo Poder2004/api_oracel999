@@ -67,8 +67,13 @@ func SetupRouter(r *gin.Engine, db *gorm.DB) {
 	})
 
 	r.POST("/lotto/generate", func(c *gin.Context) {
-		handlersadmin.ResetAndInsertLotto(c, db)
+		handlersadmin.InsertLottoHandler(c, db)
 	})
+
+	r.POST("/lotto/clear", func(c *gin.Context) {
+        handlersadmin.ClearLottoDataHandler(c, db) // <--- เส้นทางและฟังก์ชันใหม่
+    })
+
 
 	r.POST("/lotto/preview-update", func(c *gin.Context) {
 		handlersadmin.PreviewNewLotto(c)
