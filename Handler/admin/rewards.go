@@ -11,7 +11,7 @@ import (
 )
 
 // --- Struct สำหรับ "ปล่อยรางวัล" (รับข้อมูลจาก Client) ---
-// --- Struct สำหรับ "ปล่อยรางวัล" (รับข้อมูลจาก Client) ---
+
 type ReleaseRequest struct {
     Rewards []struct {
         LottoID    uint    `json:"lotto_id" binding:"required,gt=0"`
