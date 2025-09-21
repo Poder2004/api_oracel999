@@ -32,8 +32,7 @@ type RewardPreview struct {
 func GenerateRewardsPreview(c *gin.Context, db *gorm.DB) {
 	var lottos []models.Lotto
 
-	// 1. สุ่มสลากที่ยังขายอยู่ (status = 'sell') มา 4 ใบ
-	//    สำหรับรางวัลที่ 1, 2, 3, และ 5
+
 	if err := db.Model(&models.Lotto{}).
 	
 		Order("RAND()").
@@ -65,9 +64,7 @@ func GenerateRewardsPreview(c *gin.Context, db *gorm.DB) {
 	})
 }
 
-// POST /rewards/release
-// ฟังก์ชันสำหรับ "ปล่อยรางวัล" (บันทึกข้อมูลลง DB จริง)
-// ฟังก์ชันสำหรับ "ปล่อยรางวัล" (บันทึกข้อมูลลง DB จริง และ อัปเดตผลการซื้อ)
+
 func ReleaseRewards(c *gin.Context, db *gorm.DB) {
 	var req ReleaseRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -75,21 +72,21 @@ func ReleaseRewards(c *gin.Context, db *gorm.DB) {
 		return
 	}
 
-	// เริ่ม Transaction เพื่อความปลอดภัย
+	// เริ่ม Transaction
 	tx := db.Begin()
 	if tx.Error != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "failed to start transaction"})
 		return
 	}
 
-	// 1. ลบข้อมูลรางวัลเก่าทั้งหมดในตาราง rewards ทิ้ง
+	// 1. ลบรางวัลเก่า
 	if err := tx.Exec("DELETE FROM rewards").Error; err != nil {
 		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "failed to clear old rewards"})
 		return
 	}
 
-	// 2. เตรียมข้อมูลรางวัลชุดใหม่ที่จะ INSERT
+	// 2. เตรียมและ INSERT รางวัลใหม่
 	newRewards := make([]models.Reward, 0, len(req.Rewards))
 	for _, r := range req.Rewards {
 		newRewards = append(newRewards, models.Reward{
@@ -98,44 +95,74 @@ func ReleaseRewards(c *gin.Context, db *gorm.DB) {
 			PrizeTier:  r.PrizeTier,
 		})
 	}
-
-	// 3. INSERT รางวัลชุดใหม่ทั้งหมดลงในตาราง
 	if err := tx.Create(&newRewards).Error; err != nil {
 		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "failed to insert new rewards"})
 		return
 	}
 
-	// --- 🚀 ส่วนที่เพิ่มเข้ามาใหม่ ---
-	// 4. รวบรวม ID ของสลากที่ถูกรางวัลทั้งหมด
-	winningLottoIDs := make([]uint, 0, len(req.Rewards))
-	for _, r := range req.Rewards {
-		winningLottoIDs = append(winningLottoIDs, r.LottoID)
-	}
+		// --- สร้าง slice ของ lotto_number ---
+		lottoNumbers := make([]string, 0, len(req.Rewards))
+		for _, r := range req.Rewards {
+			var lotto models.Lotto
+			if err := tx.Select("lotto_number").Where("lotto_id = ?", r.LottoID).First(&lotto).Error; err != nil {
+				tx.Rollback()
+				c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "failed to fetch lotto numbers"})
+				return
+			}
+			lottoNumbers = append(lottoNumbers, lotto.LottoNumber)
+		}
 
-	// 5. อัปเดตสถานะ 'ถูก' สำหรับสลากที่ถูกรางวัลใน purchases_detail
-	// GORM: UPDATE purchases_detail SET status = 'ถูก' WHERE lotto_id IN (...)
-	if err := tx.Model(&models.PurchaseDetail{}).
-		Where("lotto_id IN ?", winningLottoIDs).
-		Update("status", "ถูก").Error; err != nil {
+			if err := tx.Exec(`
+		UPDATE purchases_detail pd
+		JOIN lotto l ON l.lotto_id = pd.lotto_id
+		SET pd.status = 'ถูก'
+		WHERE l.lotto_number IN ?
+	`, lottoNumbers).Error; err != nil {
 		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "failed to update winning purchase details"})
 		return
 	}
 
-	// 6. อัปเดตสถานะ 'ไม่ถูก' สำหรับสลากที่ไม่ถูกรางวัลใน purchases_detail
-	// GORM: UPDATE purchases_detail SET status = 'ไม่ถูก' WHERE lotto_id NOT IN (...) AND status = 'ยัง'
-	if err := tx.Model(&models.PurchaseDetail{}).
-		Where("lotto_id NOT IN ?", winningLottoIDs).
-		Where("status = ?", "ยัง"). // อัปเดตเฉพาะรายการที่ยังไม่เคยตรวจ
-		Update("status", "ไม่ถูก").Error; err != nil {
+	// สถานะไม่ถูก
+	if err := tx.Exec(`
+		UPDATE purchases_detail pd
+		JOIN lotto l ON l.lotto_id = pd.lotto_id
+		SET pd.status = 'ไม่ถูก'
+		WHERE l.lotto_number NOT IN ? AND pd.status = 'ยัง'
+	`, lottoNumbers).Error; err != nil {
 		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "failed to update losing purchase details"})
 		return
 	}
-	// --- สิ้นสุดส่วนที่เพิ่มเข้ามาใหม่ ---
 
-	// 7. ถ้าทุกอย่างสำเร็จ ให้ Commit Transaction
+	if err := tx.Exec(`
+		UPDATE purchases_detail pd
+		JOIN lotto l ON l.lotto_id = pd.lotto_id
+		JOIN rewards r ON r.prize_tier = 4
+		JOIN lotto lr ON lr.lotto_id = r.lotto_id
+		SET pd.status = 'ถูก'
+		WHERE RIGHT(l.lotto_number, 3) = RIGHT(lr.lotto_number, 3)
+	`).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "failed to update prize tier 4 winning details"})
+		return
+	}
+
+			if err := tx.Exec(`
+			UPDATE purchases_detail pd
+			JOIN lotto l ON l.lotto_id = pd.lotto_id
+			JOIN rewards r ON r.prize_tier = 5
+			JOIN lotto lr ON lr.lotto_id = r.lotto_id
+			SET pd.status = 'ถูก'
+			WHERE RIGHT(l.lotto_number, 2) = RIGHT(lr.lotto_number, 2)
+		`).Error; err != nil {
+			tx.Rollback()
+			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "failed to update prize tier 5 winning details"})
+			return
+		}
+
+	// Commit Transaction
 	if err := tx.Commit().Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "failed to commit transaction"})
 		return
@@ -146,6 +173,7 @@ func ReleaseRewards(c *gin.Context, db *gorm.DB) {
 		"message": fmt.Sprintf("ปล่อยรางวัลสำเร็จ! มีผลรางวัลใหม่ทั้งหมด %d รางวัล และอัปเดตผลการซื้อเรียบร้อยแล้ว", len(newRewards)),
 	})
 }
+
 
 
 type CurrentRewardResponse struct {
