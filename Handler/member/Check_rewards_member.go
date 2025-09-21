@@ -57,7 +57,9 @@ func CheckUserLotto(c *gin.Context, db *gorm.DB) {
 		}
 		if winningLotto.PrizeTier == 1 && winningLotto.Lotto != nil {
 			prize1Number = winningLotto.Lotto.LottoNumber
-			prize1Money = winningLotto.PrizeMoney
+			if winningLotto.PrizeTier == 4 {
+				prize1Money = winningLotto.PrizeMoney
+			}
 		}
 		if winningLotto.PrizeTier == 5 && winningLotto.Lotto != nil && len(winningLotto.Lotto.LottoNumber) == 6 {
 			prize5Number = winningLotto.Lotto.LottoNumber[4:]
