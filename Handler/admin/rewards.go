@@ -13,11 +13,11 @@ import (
 // --- Struct สำหรับ "ปล่อยรางวัล" (รับข้อมูลจาก Client) ---
 // --- Struct สำหรับ "ปล่อยรางวัล" (รับข้อมูลจาก Client) ---
 type ReleaseRequest struct {
-	Rewards []struct {
-		LottoID    uint    `json:"lotto_id" binding:"required,gt=0"`
-		PrizeTier  int     `json:"prize_tier" binding:"required,gt=0"`
-		PrizeMoney float64 `json:"prize_money" binding:"required,gte=0"`
-	} `json:"rewards" binding:"required,min=1"`
+    Rewards []struct {
+        LottoID    uint    `json:"lotto_id" binding:"required,gt=0"`
+        PrizeTier  int     `json:"prize_tier" binding:"required,gt=0"`
+        PrizeMoney float64 `json:"prize_money" binding:"required,gte=0"`
+    } `json:"rewards" binding:"required,min=1"`
 }
 
 // --- Struct สำหรับ "สุ่มรางวัล" (ส่งข้อมูลให้ Client ดูก่อน) ---
@@ -53,9 +53,9 @@ func GenerateRewardsPreview(c *gin.Context, db *gorm.DB) {
 	previews := []RewardPreview{
 		{PrizeTier: 1, PrizeMoney: 999999.00, WinningLotto: lottos[0]},
 		{PrizeTier: 2, PrizeMoney: 200000.00, WinningLotto: lottos[1]},
-		{PrizeTier: 3, PrizeMoney: 50000.00, WinningLotto: lottos[2]},
-		{PrizeTier: 4, PrizeMoney: 30000.00, WinningLotto: lottos[0]},
-		{PrizeTier: 5, PrizeMoney: 10000.00, WinningLotto: lottos[3]},
+		{PrizeTier: 3, PrizeMoney: 50000.00,  WinningLotto: lottos[2]},
+		{PrizeTier: 4, PrizeMoney: 30000.00,  WinningLotto: lottos[0]},
+		{PrizeTier: 5, PrizeMoney: 10000.00,   WinningLotto: lottos[3]},
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -147,11 +147,13 @@ func ReleaseRewards(c *gin.Context, db *gorm.DB) {
 	})
 }
 
+
 type CurrentRewardResponse struct {
 	PrizeTier   int     `json:"prize_tier"`
 	PrizeMoney  float64 `json:"prize_money"`
 	LottoNumber string  `json:"lotto_number"`
 }
+
 
 // 🚀 NEW ENDPOINT 🚀
 // GET /rewards/current
@@ -159,12 +161,7 @@ type CurrentRewardResponse struct {
 func GetCurrentRewards(c *gin.Context, db *gorm.DB) {
 	var results []CurrentRewardResponse
 
-	// ใช้ GORM เพื่อ JOIN ตาราง rewards และ lotto
-	// 1. เริ่มจาก Model Reward
-	// 2. เลือกคอลัมน์ที่ต้องการ โดยระบุชื่อตารางเพื่อความชัดเจน
-	// 3. Join ตาราง lotto โดยใช้เงื่อนไข lotto.lotto_id = rewards.lotto_id
-	// 4. เรียงลำดับจากรางวัลที่ 1 ไปน้อยสุด
-	// 5. ใช้ .Scan() เพื่อ map ผลลัพธ์ลงใน struct ที่เราสร้างขึ้นมา (CurrentRewardResponse)
+	
 	err := db.Model(&models.Reward{}).
 		Select("rewards.prize_tier, rewards.prize_money, lotto.lotto_number").
 		Joins("JOIN lotto ON lotto.lotto_id = rewards.lotto_id").
