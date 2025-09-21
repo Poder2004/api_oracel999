@@ -20,65 +20,65 @@ type LatestRewardsResponse struct {
 	Last2  string   `json:"last_2"`
 }
 
-//- ดึงผลรางวัลล่าสุดทั้งหมด
-func GetLatestRewards(c *gin.Context, db *gorm.DB) {
+// //- ดึงผลรางวัลล่าสุดทั้งหมด
+// func GetLatestRewards(c *gin.Context, db *gorm.DB) {
 
-	var rewards []struct {
-		LottoNumber string
-		PrizeTier   int
-	}
+// 	var rewards []struct {
+// 		LottoNumber string
+// 		PrizeTier   int
+// 	}
 
-	const sql = `
-		SELECT
-			lotto.lotto_number,
-			rewards.prize_tier
-		FROM
-			rewards
-		JOIN lotto ON lotto.lotto_id = rewards.lotto_id
-		ORDER BY
-			rewards.prize_tier ASC`
+// 	const sql = `
+// 		SELECT
+// 			lotto.lotto_number,
+// 			rewards.prize_tier
+// 		FROM
+// 			rewards
+// 		JOIN lotto ON lotto.lotto_id = rewards.lotto_id
+// 		ORDER BY
+// 			rewards.prize_tier ASC`
 
-	// Execute คำสั่ง SQL และ Scan ผลลัพธ์
-	if err := db.Raw(sql).Scan(&rewards).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "database error"})
-		return
-	}
+// 	// Execute คำสั่ง SQL และ Scan ผลลัพธ์
+// 	if err := db.Raw(sql).Scan(&rewards).Error; err != nil {
+// 		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "database error"})
+// 		return
+// 	}
 
-	// --- ส่วนของการประมวลผลเพื่อสร้าง Response  ---
-	resp := LatestRewardsResponse{
-		Prize1: []string{},
-		Prize2: []string{},
-		Prize3: []string{},
-	}
+// 	// --- ส่วนของการประมวลผลเพื่อสร้าง Response  ---
+// 	resp := LatestRewardsResponse{
+// 		Prize1: []string{},
+// 		Prize2: []string{},
+// 		Prize3: []string{},
+// 	}
 
-	for _, r := range rewards {
-		switch r.PrizeTier {
-		case 1:
-			resp.Prize1 = append(resp.Prize1, r.LottoNumber)
-		case 2:
-			resp.Prize2 = append(resp.Prize2, r.LottoNumber)
-		case 3:
-			resp.Prize3 = append(resp.Prize3, r.LottoNumber)
-		case 5: // Tier 5 คือเลขท้าย 2 ตัว
-			if len(r.LottoNumber) == 6 {
-				resp.Last2 = r.LottoNumber[4:]
-			}
-		}
-	}
+// 	for _, r := range rewards {
+// 		switch r.PrizeTier {
+// 		case 1:
+// 			resp.Prize1 = append(resp.Prize1, r.LottoNumber)
+// 		case 2:
+// 			resp.Prize2 = append(resp.Prize2, r.LottoNumber)
+// 		case 3:
+// 			resp.Prize3 = append(resp.Prize3, r.LottoNumber)
+// 		case 5: // Tier 5 คือเลขท้าย 2 ตัว
+// 			if len(r.LottoNumber) == 6 {
+// 				resp.Last2 = r.LottoNumber[4:]
+// 			}
+// 		}
+// 	}
 
-	// เลขท้าย 3 ตัวมาจากรางวัลที่ 1
-	if len(resp.Prize1) > 0 {
-		prize1Number := resp.Prize1[0]
-		if len(prize1Number) == 6 {
-			resp.Last3 = prize1Number[3:]
-		}
-	}
+// 	// เลขท้าย 3 ตัวมาจากรางวัลที่ 1
+// 	if len(resp.Prize1) > 0 {
+// 		prize1Number := resp.Prize1[0]
+// 		if len(prize1Number) == 6 {
+// 			resp.Last3 = prize1Number[3:]
+// 		}
+// 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"status": "success",
-		"data":   resp,
-	})
-}
+// 	c.JSON(http.StatusOK, gin.H{
+// 		"status": "success",
+// 		"data":   resp,
+// 	})
+// }
 
 // --- Struct สำหรับ Response ของ /rewards/check (อัปเดต) ---
 type CheckResult struct {

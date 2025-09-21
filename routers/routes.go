@@ -49,9 +49,9 @@ func SetupRouter(r *gin.Engine, db *gorm.DB) {
 		handlers.RandomLotto(c, db)
 	})
 
-	r.GET("/rewards/latest", func(c *gin.Context) {
-		handlers.GetLatestRewards(c, db)
-	})
+	// r.GET("/rewards/latest", func(c *gin.Context) {
+	// 	handlers.GetLatestRewards(c, db)
+	// })
 
 	r.GET("/rewards/check", func(c *gin.Context) {
 		handlers.CheckUserLotto(c, db)

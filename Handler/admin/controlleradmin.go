@@ -3,9 +3,9 @@ package handlers
 import (
 	"log"
 	"net/http"
+
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
-
 )
 
 // ClearDataHandler คือ Gin handler สำหรับลบข้อมูลโดยมีเงื่อนไข
@@ -58,7 +58,7 @@ func ClearDataHandler(c *gin.Context, db *gorm.DB) {
 		"rewards",
 		"purchases_detail",
 		"purchases",
-		"lottos",
+		"lotto",
 	}
 
 	for _, table := range tablesToClear {
@@ -104,7 +104,3 @@ func ClearDataHandler(c *gin.Context, db *gorm.DB) {
 		"message": "All data has been cleared successfully, except for the requesting user.",
 	})
 }
-
-
-
-
