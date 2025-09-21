@@ -168,11 +168,4 @@ func ResetAndInsertLotto(c *gin.Context, db *gorm.DB) {
 	})
 }
 
-func LottoCount(c *gin.Context, db *gorm.DB) {
-	var cnt int64
-	if err := db.Model(&models.Lotto{}).Count(&cnt).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"status": "success", "count": cnt})
-}
+
