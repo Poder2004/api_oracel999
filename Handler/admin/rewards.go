@@ -51,11 +51,11 @@ func GenerateRewardsPreview(c *gin.Context, db *gorm.DB) {
 
 	// 3. จัดเรียงข้อมูลเพื่อส่งกลับไปให้ Admin ดู
 	previews := []RewardPreview{
-		{PrizeTier: 1, PrizeMoney: 0.00, WinningLotto: lottos[0]},
-		{PrizeTier: 2, PrizeMoney: 0.00, WinningLotto: lottos[1]},
-		{PrizeTier: 3, PrizeMoney: 0.00,  WinningLotto: lottos[2]},
-		{PrizeTier: 4, PrizeMoney: 0.00,  WinningLotto: lottos[0]},
-		{PrizeTier: 5, PrizeMoney: 0.00,   WinningLotto: lottos[3]},
+		{PrizeTier: 1, PrizeMoney: 999999.00, WinningLotto: lottos[0]},
+		{PrizeTier: 2, PrizeMoney: 200000.00, WinningLotto: lottos[1]},
+		{PrizeTier: 3, PrizeMoney: 50000.00,  WinningLotto: lottos[2]},
+		{PrizeTier: 4, PrizeMoney: 30000.00,  WinningLotto: lottos[0]},
+		{PrizeTier: 5, PrizeMoney: 10000.00,   WinningLotto: lottos[3]},
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -67,6 +67,7 @@ func GenerateRewardsPreview(c *gin.Context, db *gorm.DB) {
 
 // POST /rewards/release
 // ฟังก์ชันสำหรับ "ปล่อยรางวัล" (บันทึกข้อมูลลง DB จริง)
+// ฟังก์ชันสำหรับ "ปล่อยรางวัล" (บันทึกข้อมูลลง DB จริง และ อัปเดตผลการซื้อ)
 func ReleaseRewards(c *gin.Context, db *gorm.DB) {
 	var req ReleaseRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -76,11 +77,14 @@ func ReleaseRewards(c *gin.Context, db *gorm.DB) {
 
 	// เริ่ม Transaction เพื่อความปลอดภัย
 	tx := db.Begin()
+	if tx.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "failed to start transaction"})
+		return
+	}
 
 	// 1. ลบข้อมูลรางวัลเก่าทั้งหมดในตาราง rewards ทิ้ง
-	//    วิธีนี้รับประกันว่าจะไม่มีรางวัลของงวดเก่าปะปนกับงวดใหม่
 	if err := tx.Exec("DELETE FROM rewards").Error; err != nil {
-		tx.Rollback() // ย้อนกลับถ้าล้มเหลว
+		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "failed to clear old rewards"})
 		return
 	}
@@ -92,19 +96,46 @@ func ReleaseRewards(c *gin.Context, db *gorm.DB) {
 			LottoID:    r.LottoID,
 			PrizeMoney: r.PrizeMoney,
 			PrizeTier:  r.PrizeTier,
-			// Status จะเป็น default 'ยังไม่ขึ้นเงิน' อัตโนมัติ
 		})
 	}
 
 	// 3. INSERT รางวัลชุดใหม่ทั้งหมดลงในตาราง
 	if err := tx.Create(&newRewards).Error; err != nil {
-		tx.Rollback() // ย้อนกลับถ้าล้มเหลว
+		tx.Rollback()
 		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "failed to insert new rewards"})
 		return
 	}
 
-	//เขียนเช็ค update 
-	// 4. ถ้าทุกอย่างสำเร็จ ให้ Commit Transaction
+	// --- 🚀 ส่วนที่เพิ่มเข้ามาใหม่ ---
+	// 4. รวบรวม ID ของสลากที่ถูกรางวัลทั้งหมด
+	winningLottoIDs := make([]uint, 0, len(req.Rewards))
+	for _, r := range req.Rewards {
+		winningLottoIDs = append(winningLottoIDs, r.LottoID)
+	}
+
+	// 5. อัปเดตสถานะ 'ถูก' สำหรับสลากที่ถูกรางวัลใน purchases_detail
+	// GORM: UPDATE purchases_detail SET status = 'ถูก' WHERE lotto_id IN (...)
+	if err := tx.Model(&models.PurchaseDetail{}).
+		Where("lotto_id IN ?", winningLottoIDs).
+		Update("status", "ถูก").Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "failed to update winning purchase details"})
+		return
+	}
+
+	// 6. อัปเดตสถานะ 'ไม่ถูก' สำหรับสลากที่ไม่ถูกรางวัลใน purchases_detail
+	// GORM: UPDATE purchases_detail SET status = 'ไม่ถูก' WHERE lotto_id NOT IN (...) AND status = 'ยัง'
+	if err := tx.Model(&models.PurchaseDetail{}).
+		Where("lotto_id NOT IN ?", winningLottoIDs).
+		Where("status = ?", "ยัง"). // อัปเดตเฉพาะรายการที่ยังไม่เคยตรวจ
+		Update("status", "ไม่ถูก").Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "failed to update losing purchase details"})
+		return
+	}
+	// --- สิ้นสุดส่วนที่เพิ่มเข้ามาใหม่ ---
+
+	// 7. ถ้าทุกอย่างสำเร็จ ให้ Commit Transaction
 	if err := tx.Commit().Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "failed to commit transaction"})
 		return
@@ -112,7 +143,7 @@ func ReleaseRewards(c *gin.Context, db *gorm.DB) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "success",
-		"message": fmt.Sprintf("ปล่อยรางวัลสำเร็จ! มีผลรางวัลใหม่ทั้งหมด %d รางวัล", len(newRewards)),
+		"message": fmt.Sprintf("ปล่อยรางวัลสำเร็จ! มีผลรางวัลใหม่ทั้งหมด %d รางวัล และอัปเดตผลการซื้อเรียบร้อยแล้ว", len(newRewards)),
 	})
 }
 
