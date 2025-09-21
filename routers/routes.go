@@ -62,7 +62,7 @@ func SetupRouter(r *gin.Engine, db *gorm.DB) {
 
 	//admin
 	r.POST("/lotto/generate", func(c *gin.Context) {
-		handlersadmin.InsertLotto(c, db)
+		handlersadmin.ResetAndInsertLotto(c, db)
 	})
 	r.GET("/lotto", func(c *gin.Context) {
 		handlersadmin.GetAllLotto(c, db)
@@ -73,11 +73,7 @@ func SetupRouter(r *gin.Engine, db *gorm.DB) {
 	})
 
 	r.POST("/lotto/preview-update", func(c *gin.Context) {
-		handlersadmin.PreviewUpdateLotto(c, db)
-	})
-
-	r.POST("/lotto/bulk-update", func(c *gin.Context) {
-		handlersadmin.BulkUpdateLottoNumbers(c, db)
+		handlersadmin.PreviewNewLotto(c)
 	})
 
 	r.GET("/rewards/generate-preview", func(c *gin.Context) {

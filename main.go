@@ -21,5 +21,5 @@ func main() {
 	routers.SetupRouter(r, db)
 
 	// // เริ่มรันเซิร์ฟเวอร์
-	// r.Run(":8080")
+	r.Run(":8080")
 }

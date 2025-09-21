@@ -7,11 +7,10 @@ import (
 
 // ฟังก์ชันสำหรับการเชื่อมต่อฐานข้อมูล
 func SetupDatabaseConnection() (*gorm.DB, error) {
-    dsn := "mb68_66011212083:EfiX(GT!WO@R@tcp(202.28.34.203:3306)/mb68_66011212083?charset=utf8mb4&parseTime=True&loc=Local"
-    db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
-    if err != nil {
-        return nil, err
-    }
-    return db, nil
+	dsn := "mb68_66011212019:nqpf^)E3_^rG@tcp(202.28.34.203:3306)/mb68_66011212019?charset=utf8mb4&parseTime=True&loc=Local"
+	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
+	if err != nil {
+		return nil, err
+	}
+	return db, nil
 }
- 
