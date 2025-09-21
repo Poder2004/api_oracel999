@@ -1,8 +1,10 @@
 package main
 
 import (
+	"log"
 	"my-go-project/database"
 	"my-go-project/routers"
+	"os"
 
 	"github.com/gin-gonic/gin"
 )
@@ -22,4 +24,13 @@ func main() {
 
 	// // เริ่มรันเซิร์ฟเวอร์
 	// r.Run(":8080")
+	// ✅ เริ่มรันเซิร์ฟเวอร์ โดยใช้ PORT จาก Render
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080" // default เวลา run local
+	}
+	log.Printf("🚀 Server running on port %s", port)
+	if err := r.Run(":" + port); err != nil {
+		log.Fatal("❌ Failed to start server: ", err)
+	}
 }
