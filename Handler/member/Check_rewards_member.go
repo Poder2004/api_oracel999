@@ -1,17 +1,17 @@
 package handlers
 
 import (
-	"fmt" // เพิ่ม: import ที่จำเป็น
+	"fmt"
 	"net/http"
 	"strings"
 
-	"my-go-project/models"
+	"my-go-project/models" // อย่าลืมแก้ path ให้ถูกต้อง
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
-// --- Struct สำหรับ Response ---
+// Struct สำหรับ Response
 type CheckResult struct {
 	IsWinner    bool    `json:"is_winner"`
 	PrizeTier   int     `json:"prize_tier"`
@@ -20,9 +20,8 @@ type CheckResult struct {
 	LottoNumber string  `json:"lotto_number"`
 }
 
-// - ตรวจสอบสลากของผู้ใช้
+// - ตรวจสอบสลากของผู้ใช้ (แก้ไขแล้ว)
 func CheckUserLotto(c *gin.Context, db *gorm.DB) {
-
 	userNumber := c.Query("number")
 	if len(userNumber) != 6 {
 		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "number must be 6 digits"})
@@ -35,14 +34,17 @@ func CheckUserLotto(c *gin.Context, db *gorm.DB) {
 		return
 	}
 
-	var prize1Number string
+	// --- Reworked Logic ---
+	// ตัวแปรสำหรับเก็บรางวัลเลขท้ายโดยเฉพาะ
+	var prize4Numbers []string
 	var prize5Number string
-	var prize1Money float64
+	var prize4Money float64
 	var prize5Money float64
 
-	// ตรวจรางวัลใหญ่ (6 ตัวตรง)
+	// ตรวจรางวัลใหญ่ (6 ตัวตรง) ก่อน
 	for _, winningLotto := range winningLottos {
 		if winningLotto.Lotto != nil && winningLotto.Lotto.LottoNumber == userNumber {
+			// กรณีถูกรางวัลที่ 1, 2, 3 หรือรางวัลอื่นๆ ที่เลขตรงกันทั้ง 6 หลัก
 			c.JSON(http.StatusOK, gin.H{
 				"status": "success",
 				"data": CheckResult{
@@ -55,35 +57,44 @@ func CheckUserLotto(c *gin.Context, db *gorm.DB) {
 			})
 			return
 		}
-		if winningLotto.PrizeTier == 1 && winningLotto.Lotto != nil {
-			prize1Number = winningLotto.Lotto.LottoNumber
-			if winningLotto.PrizeTier == 4 {
-				prize1Money = winningLotto.PrizeMoney
+
+		// เก็บข้อมูลรางวัลเลขท้ายเพื่อตรวจสอบทีหลัง
+		switch winningLotto.PrizeTier {
+		case 4: // รางวัลเลขท้าย 3 ตัว
+			if winningLotto.Lotto != nil && len(winningLotto.Lotto.LottoNumber) == 6 {
+				prize4Numbers = append(prize4Numbers, winningLotto.Lotto.LottoNumber[3:])
+				if prize4Money == 0 { // เก็บเงินรางวัลแค่ครั้งเดียว
+					prize4Money = winningLotto.PrizeMoney
+				}
 			}
-		}
-		if winningLotto.PrizeTier == 5 && winningLotto.Lotto != nil && len(winningLotto.Lotto.LottoNumber) == 6 {
-			prize5Number = winningLotto.Lotto.LottoNumber[4:]
-			prize5Money = winningLotto.PrizeMoney
+		case 5: // รางวัลเลขท้าย 2 ตัว
+			if winningLotto.Lotto != nil && len(winningLotto.Lotto.LottoNumber) == 6 {
+				prize5Number = winningLotto.Lotto.LottoNumber[4:]
+				prize5Money = winningLotto.PrizeMoney
+			}
 		}
 	}
 
-	// ตรวจเลขท้าย 3 ตัว (รางวัลที่ 4)
-	if prize1Number != "" && len(prize1Number) == 6 {
-		if strings.HasSuffix(userNumber, prize1Number[3:]) {
-			c.JSON(http.StatusOK, gin.H{
-				"status": "success",
-				"data": CheckResult{
-					IsWinner:    true,
-					PrizeTier:   4,
-					PrizeMoney:  prize1Money,
-					Message:     "คุณถูกรางวัลเลขท้าย 3 ตัว",
-					LottoNumber: userNumber,
-				},
-			})
-			return
+	// ตรวจรางวัลเลขท้าย 3 ตัว (รางวัลที่ 4)
+	if len(prize4Numbers) > 0 {
+		for _, p4num := range prize4Numbers {
+			if strings.HasSuffix(userNumber, p4num) {
+				c.JSON(http.StatusOK, gin.H{
+					"status": "success",
+					"data": CheckResult{
+						IsWinner:    true,
+						PrizeTier:   4,
+						PrizeMoney:  prize4Money, // ใช้เงินรางวัลของ Tier 4
+						Message:     "คุณถูกรางวัลเลขท้าย 3 ตัว",
+						LottoNumber: userNumber,
+					},
+				})
+				return
+			}
 		}
 	}
-	// ตรวจเลขท้าย 2 ตัว (รางวัลที่ 5)
+
+	// ตรวจรางวัลเลขท้าย 2 ตัว (รางวัลที่ 5)
 	if prize5Number != "" {
 		if strings.HasSuffix(userNumber, prize5Number) {
 			c.JSON(http.StatusOK, gin.H{
@@ -91,7 +102,7 @@ func CheckUserLotto(c *gin.Context, db *gorm.DB) {
 				"data": CheckResult{
 					IsWinner:    true,
 					PrizeTier:   5,
-					PrizeMoney:  prize5Money,
+					PrizeMoney:  prize5Money, // ใช้เงินรางวัลของ Tier 5
 					Message:     "คุณถูกรางวัลเลขท้าย 2 ตัว",
 					LottoNumber: userNumber,
 				},
@@ -105,7 +116,7 @@ func CheckUserLotto(c *gin.Context, db *gorm.DB) {
 		"status": "success",
 		"data": CheckResult{
 			IsWinner:    false,
-			Message:     "อาจจะยังก่อนน๊า คุณไม่ถูกรางวัล",
+			Message:     "เสียใจด้วยน๊า คุณไม่ถูกรางวัล",
 			LottoNumber: userNumber,
 		},
 	})
@@ -118,16 +129,17 @@ type CashInRequest struct {
 	LottoNumber string `json:"lotto_number"`
 }
 
+// ... (import statements and CashInRequest struct are the same) ...
+
+// แก้ไขแล้ว
 func CashIn(c *gin.Context, db *gorm.DB) {
 	var req CashInRequest
 
-	// --- 1. Bind JSON ---
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request data"})
 		return
 	}
 
-	// --- 2. หา Lotto จากหมายเลข ---
 	var lotto models.Lotto
 	result := db.Raw("SELECT lotto_id FROM lotto WHERE lotto_number = ? LIMIT 1", req.LottoNumber).Scan(&lotto)
 	if result.Error != nil || result.RowsAffected == 0 {
@@ -135,7 +147,6 @@ func CashIn(c *gin.Context, db *gorm.DB) {
 		return
 	}
 
-	// --- 3. ตรวจสอบว่า User เป็นเจ้าของ Lotto ใบนี้จริงหรือไม่ และดึง cash_in มาด้วย ---
 	type PDRow struct {
 		PDID   uint
 		CashIn string
@@ -157,7 +168,7 @@ func CashIn(c *gin.Context, db *gorm.DB) {
 		return
 	}
 
-	// --- 4. ตรวจสอบว่าถูกรางวัลหรือไม่ ---
+	// --- 4. ตรวจสอบว่าถูกรางวัลหรือไม่ (Reworked Logic) ---
 	var reward models.Reward
 	result = db.Raw("SELECT * FROM rewards WHERE lotto_id = ? LIMIT 1", lotto.LottoID).Scan(&reward)
 
@@ -166,8 +177,9 @@ func CashIn(c *gin.Context, db *gorm.DB) {
 	prizeTier := 0
 	prizeMoney := float64(0)
 
-	// case 1: รางวัลตรง (รางวัลที่ 1–3)
+	// Case 1: รางวัลตรง (รางวัลที่ 1–3)
 	if result.Error == nil && result.RowsAffected > 0 {
+		// ตรวจสอบให้แน่ใจว่าเป็นรางวัลประเภทเลขตรง 6 หลัก
 		if reward.PrizeTier >= 1 && reward.PrizeTier <= 3 {
 			isWinner = true
 			prizeTier = reward.PrizeTier
@@ -175,7 +187,7 @@ func CashIn(c *gin.Context, db *gorm.DB) {
 		}
 	}
 
-	// case 2: รางวัลเลขท้าย (รางวัลที่ 4–5)
+	// Case 2: รางวัลเลขท้าย (รางวัลที่ 4–5)
 	if !isWinner {
 		var allRewards []models.Reward
 		if err := db.Preload("Lotto").Find(&allRewards).Error; err != nil {
@@ -183,28 +195,38 @@ func CashIn(c *gin.Context, db *gorm.DB) {
 			return
 		}
 
-		var prize1Number string
-		var prize1Money float64
+		// ตัวแปรสำหรับเก็บรางวัลเลขท้ายโดยเฉพาะ
+		var prize4Numbers []string
+		var prize4Money float64
 		var prize5Number string
 		var prize5Money float64
 
 		for _, r := range allRewards {
-			if r.PrizeTier == 1 && r.Lotto != nil {
-				prize1Number = r.Lotto.LottoNumber
-				prize1Money = r.PrizeMoney
-			}
-			if r.PrizeTier == 5 && r.Lotto != nil && len(r.Lotto.LottoNumber) == 6 {
-				prize5Number = r.Lotto.LottoNumber[4:]
-				prize5Money = r.PrizeMoney
+			switch r.PrizeTier {
+			case 4: // รางวัลเลขท้าย 3 ตัว
+				if r.Lotto != nil && len(r.Lotto.LottoNumber) == 6 {
+					prize4Numbers = append(prize4Numbers, r.Lotto.LottoNumber[3:])
+					if prize4Money == 0 {
+						prize4Money = r.PrizeMoney
+					}
+				}
+			case 5: // รางวัลเลขท้าย 2 ตัว
+				if r.Lotto != nil && len(r.Lotto.LottoNumber) == 6 {
+					prize5Number = r.Lotto.LottoNumber[4:]
+					prize5Money = r.PrizeMoney
+				}
 			}
 		}
 
 		// ตรวจรางวัลที่ 4 (เลขท้าย 3 ตัว)
-		if prize1Number != "" && len(prize1Number) == 6 {
-			if strings.HasSuffix(userNumber, prize1Number[3:]) {
-				isWinner = true
-				prizeTier = 4
-				prizeMoney = prize1Money
+		if len(prize4Numbers) > 0 {
+			for _, p4num := range prize4Numbers {
+				if strings.HasSuffix(userNumber, p4num) {
+					isWinner = true
+					prizeTier = 4
+					prizeMoney = prize4Money // ใช้เงินรางวัลของ Tier 4
+					break
+				}
 			}
 		}
 
@@ -213,7 +235,7 @@ func CashIn(c *gin.Context, db *gorm.DB) {
 			if strings.HasSuffix(userNumber, prize5Number) {
 				isWinner = true
 				prizeTier = 5
-				prizeMoney = prize5Money
+				prizeMoney = prize5Money // ใช้เงินรางวัลของ Tier 5
 			}
 		}
 	}
@@ -247,7 +269,6 @@ func CashIn(c *gin.Context, db *gorm.DB) {
 		return
 	}
 
-	// Commit
 	if err := tx.Commit().Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to commit transaction"})
 		return
